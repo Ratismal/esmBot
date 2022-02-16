@@ -41,7 +41,7 @@ RUN update-ms-fonts && fc-cache -f
 RUN adduser esmBot -s /bin/sh -D
 WORKDIR /home/esmBot/.internal
 
-COPY ./assets/* /usr/share/fonts
+COPY ./assets/* /usr/share/fonts/
 RUN fc-cache -fv
 
 COPY --chown=node:node ./package.json package.json
