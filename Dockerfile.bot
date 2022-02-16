@@ -41,10 +41,7 @@ RUN update-ms-fonts && fc-cache -f
 RUN adduser esmBot -s /bin/sh -D
 WORKDIR /home/esmBot/.internal
 
-COPY ./assets/caption.otf /usr/share/fonts/caption.otf
-COPY ./assets/caption2.ttf /usr/share/fonts/caption2.ttf
-COPY ./assets/hbc.ttf /usr/share/fonts/hbc.ttf
-COPY ./assets/reddit.ttf /usr/share/fonts/reddit.ttf
+COPY ./assets/* /usr/share/fonts
 RUN fc-cache -fv
 
 COPY --chown=node:node ./package.json package.json
