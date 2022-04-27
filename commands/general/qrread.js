@@ -7,10 +7,10 @@ import imageDetect from "../../utils/imagedetect.js";
 
 class QrReadCommand extends Command {
   async run() {
-    const image = await imageDetect(this.client, this.message);
+    const image = await imageDetect(this.client, this.message, this.interaction, this.options);
     if (image === undefined) return "You need to provide an image/GIF with a QR code to read!";
-    this.client.sendChannelTyping(this.message.channel.id);
-    const data = await (await fetch(image.path)).buffer();
+    await this.acknowledge();
+    const data = Buffer.from(await (await fetch(image.path)).arrayBuffer());
     const rawData = await sharp(data).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
     const qrBuffer = jsqr(rawData.data, rawData.info.width, rawData.info.height);
     if (!qrBuffer) return "I couldn't find a QR code!";
@@ -18,6 +18,15 @@ class QrReadCommand extends Command {
   }
 
   static description = "Reads a QR code";
+  static flags = [{
+    name: "image",
+    type: 11,
+    description: "An image/GIF attachment"
+  }, {
+    name: "link",
+    type: 3,
+    description: "An image/GIF URL"
+  }];
 }
 
 export default QrReadCommand;

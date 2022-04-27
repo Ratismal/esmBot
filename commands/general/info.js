@@ -1,4 +1,6 @@
 import { readFileSync } from "fs";
+import { dirname } from "path";
+import { fileURLToPath } from "url";
 const { version } = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url)));
 import Command from "../../classes/command.js";
 import { exec as baseExec } from "child_process";
@@ -19,11 +21,11 @@ class InfoCommand extends Command {
         description: `This instance is managed by **${owner.username}#${owner.discriminator}**.`,
         fields: [{
           name: "ℹ️ Version:",
-          value: `v${version}${process.env.NODE_ENV === "development" ? `-dev (${(await exec("git rev-parse HEAD")).stdout.substring(0, 7)})` : ""}`
+          value: `v${version}${process.env.NODE_ENV === "development" ? `-dev (${(await exec("git rev-parse HEAD", { cwd: dirname(fileURLToPath(import.meta.url)) })).stdout.substring(0, 7)})` : ""}`
         },
         {
           name: "📝 Credits:",
-          value: "Bot by **[Essem](https://essem.space)** and **[various contributors](https://github.com/esmBot/esmBot/graphs/contributors)**\nIcon by **[MintBurrow](https://twitter.com/MintBurrow)**"
+          value: "Bot by **[Essem](https://essem.space)** and **[various contributors](https://github.com/esmBot/esmBot/graphs/contributors)**\nLogo by **[MintBurrow](https://twitter.com/MintBurrow)**"
         },
         {
           name: "💬 Total Servers:",
@@ -36,6 +38,10 @@ class InfoCommand extends Command {
         {
           name: "💻 Source Code:",
           value: "[Click here!](https://github.com/esmBot/esmBot)"
+        },
+        {
+          name: "🛡️ Privacy Policy:",
+          value: "[Click here!](https://projectlounge.pw/esmBot/privacy.html)"
         },
         {
           name: "🐦 Twitter:",

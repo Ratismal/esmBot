@@ -6,10 +6,10 @@ import MusicCommand from "../../classes/musicCommand.js";
 
 class QueueCommand extends MusicCommand {
   async run() {
-    if (!this.message.channel.guild) return "This command only works in servers!";
-    if (!this.message.member.voiceState.channelID) return "You need to be in a voice channel first!";
-    if (!this.message.channel.guild.members.get(this.client.user.id).voiceState.channelID) return "I'm not in a voice channel!";
-    if (!this.message.channel.permissionsOf(this.client.user.id).has("embedLinks")) return "I don't have the `Embed Links` permission!";
+    if (!this.channel.guild) return "This command only works in servers!";
+    if (!this.member.voiceState.channelID) return "You need to be in a voice channel first!";
+    if (!this.channel.guild.members.get(this.client.user.id).voiceState.channelID) return "I'm not in a voice channel!";
+    if (!this.channel.permissionsOf(this.client.user.id).has("embedLinks")) return "I don't have the `Embed Links` permission!";
     const player = this.connection;
     //const tracks = await Rest.decode(player.player.node, queue);
     const tracks = await fetch(`http://${player.player.node.host}:${player.player.node.port}/decodetracks`, { method: "POST", body: JSON.stringify(this.queue), headers: { Authorization: player.player.node.password, "Content-Type": "application/json" } }).then(res => res.json());
@@ -49,7 +49,7 @@ class QueueCommand extends MusicCommand {
       });
     }
     if (embeds.length === 0) return "There's nothing in the queue!";
-    return paginator(this.client, this.message, embeds);
+    return paginator(this.client, { type: this.type, message: this.message, interaction: this.interaction, channel: this.channel, author: this.author }, embeds);
   }
 
   static description = "Shows the current queue";

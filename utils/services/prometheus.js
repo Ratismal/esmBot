@@ -22,7 +22,7 @@ class PrometheusWorker extends BaseServiceWorker {
 # HELP esmbot_shard_count Number of shards the bot has
 # TYPE esmbot_shard_count gauge
 `);
-        if (process.env.API === "true") {
+        if (process.env.API_TYPE === "ws") {
           const servers = await this.ipc.serviceCommand("image", { type: "stats" }, true);
           res.write(`# HELP esmbot_connected_workers Number of workers connected
 # TYPE esmbot_connected_workers gauge
@@ -36,7 +36,6 @@ esmbot_connected_workers ${servers.length}
 `);
           for (const [i, w] of servers.entries()) {
             res.write(`esmbot_running_jobs{worker="${i}"} ${w.runningJobs}\n`);
-            res.write(`esmbot_queued_jobs{worker="${i}"} ${w.queued}\n`);
             res.write(`esmbot_max_jobs{worker="${i}"} ${w.max}\n`);
           }
         }

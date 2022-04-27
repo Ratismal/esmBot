@@ -9,8 +9,10 @@ Please refer to step 3 of the setup guide.`);
 }
 
 // load config from .env file
+import { resolve, dirname } from "path";
+import { fileURLToPath } from "url";
 import { config } from "dotenv";
-config();
+config({ path: resolve(dirname(fileURLToPath(import.meta.url)), ".env") });
 
 // main sharding manager
 import { Fleet } from "eris-fleet";
@@ -25,6 +27,8 @@ import winston from "winston";
 import { exec as baseExec } from "child_process";
 import { promisify } from "util";
 const exec = promisify(baseExec);
+// database stuff
+import database from "./utils/database.js";
 // dbl posting
 import { Api } from "@top-gg/sdk";
 const dbl = process.env.NODE_ENV === "production" && process.env.DBL ? new Api(process.env.DBL) : null;
@@ -53,7 +57,7 @@ k  <BBBw BBBBEBBBBBBBBBBBBBBBBBQ4BM  #
       *+,   " F'"'*^~~~^"^\`  V+*^       
           \`"""                          
           
-esmBot ${esmBotVersion} (${(await exec("git rev-parse HEAD").catch(() => {})).stdout.substring(0, 7)}), powered by eris-fleet ${erisFleetVersion}
+esmBot ${esmBotVersion} (${(await exec("git rev-parse HEAD").then(output => output.stdout.substring(0, 7), () => "unknown commit"))}), powered by eris-fleet ${erisFleetVersion}
 `);
 }
 
@@ -107,6 +111,7 @@ const Admiral = new Fleet({
       requestTimeout: 30000
     }
   },
+  useCentralRequestHandler: process.env.DEBUG_LOG ? false : true, // workaround for eris-fleet weirdness
   services: [
     { name: "prometheus", ServiceWorker: PrometheusWorker },
     { name: "image", ServiceWorker: ImageWorker }
@@ -127,7 +132,7 @@ if (isMaster) {
       new winston.transports.File({ filename: "logs/error.log", level: "error" }),
       new winston.transports.File({ filename: "logs/main.log" })
     ],
-    level: "main",
+    level: process.env.DEBUG_LOG ? "debug" : "main",
     format: winston.format.combine(
       winston.format.timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
       winston.format.printf((info) => {
@@ -143,9 +148,13 @@ if (isMaster) {
   winston.addColors({
     info: "green",
     main: "gray",
-    debug: "purple",
+    debug: "magenta",
     warn: "yellow",
     error: "red"
+  });
+
+  database.upgrade(logger).then(result => {
+    if (result === 1) return process.exit(1);
   });
 
   Admiral.on("log", (m) => logger.main(m));

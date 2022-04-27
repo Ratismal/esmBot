@@ -3,8 +3,8 @@ const allowedFonts = ["futura", "impact", "helvetica", "arial", "roboto", "noto"
 
 class MotivateCommand extends ImageCommand {
   params(url) {
-    const newArgs = this.args.filter(item => !item.includes(url));
-    const [topText, bottomText] = newArgs.join(" ").split(/(?<!\\),/).map(elem => elem.trim());
+    const newArgs = this.type === "classic" ? this.args.filter(item => !item.includes(url)).join(" ") : this.options.text;
+    const [topText, bottomText] = newArgs.split(/(?<!\\),/).map(elem => elem.trim());
     return {
       top: topText.replaceAll("&", "\\&amp;").replaceAll(">", "\\&gt;").replaceAll("<", "\\&lt;").replaceAll("\"", "\\&quot;").replaceAll("'", "\\&apos;").replaceAll("%", "\\%"),
       bottom: bottomText ? bottomText.replaceAll("&", "\\&amp;").replaceAll(">", "\\&gt;").replaceAll("<", "\\&lt;").replaceAll("\"", "\\&quot;").replaceAll("'", "\\&apos;").replaceAll("%", "\\%") : "",
@@ -12,14 +12,26 @@ class MotivateCommand extends ImageCommand {
     };
   }
 
+  static init() {
+    super.init();
+    this.flags.push({
+      name: "font",
+      type: 3,
+      choices: (() => {
+        const array = [];
+        for (const font of allowedFonts) {
+          array.push({ name: font, value: font });
+        }
+        return array;
+      })(),
+      description: "Specify the font you want to use (default: times)"
+    });
+    return this;
+  }
+
   static description = "Generates a motivational poster";
   static aliases = ["motivational", "motiv", "demotiv", "demotivational", "poster", "motivation", "demotivate"];
   static arguments = ["[top text]", "{bottom text}"];
-  static flags = [{
-    name: "font",
-    type: allowedFonts.join("|"),
-    description: "Specify the font you want to use (default: `times`)"
-  }];
 
   static requiresText = true;
   static noText = "You need to provide some text to generate a motivational poster!";

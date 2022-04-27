@@ -25,7 +25,7 @@ const Rinit = 0x08;
 class ImageConnection {
   constructor(host, auth, tls = false) {
     this.requests = new Map();
-    if(!host.includes(":")){
+    if (!host.includes(":")) {
       host += ":3762";
     }
     this.host = host;
@@ -42,11 +42,11 @@ class ImageConnection {
       this.wsproto = "ws";
     }
     this.sockurl = `${this.wsproto}://${host}/sock`;
-    let headers = {};
-    if(auth){
+    const headers = {};
+    if (auth) {
       headers.Authentication = auth;
     }
-    this.conn = new WebSocket(this.sockurl, {headers});
+    this.conn = new WebSocket(this.sockurl, { headers });
     let httpproto;
     if (tls) {
       httpproto = "https";
@@ -154,6 +154,9 @@ class ImageConnection {
         break;
       case "image/webp":
         type = "webp";
+        break;
+      default:
+        type = contentType;
         break;
     }
     return { buffer: Buffer.from(await req.arrayBuffer()), type };

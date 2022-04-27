@@ -50,7 +50,7 @@ export default async (client, cluster, worker, ipc, message) => {
   if (!message.content.startsWith(prefix)) return;
 
   // separate commands and args
-  const replace = isMention ? `@${client.user.username} ` : prefix;
+  const replace = isMention ? `@${(message.channel.guild ? message.channel.guild.members.get(client.user.id).nick : client.user.username) ?? client.user.username} ` : prefix;
   const content = message.cleanContent.substring(replace.length).trim();
   const rawContent = message.content.substring(prefix.length).trim();
   const preArgs = content.split(/\s+/g);
@@ -85,7 +85,7 @@ export default async (client, cluster, worker, ipc, message) => {
   if (!cmd) return;
 
   // actually run the command
-  log("log", `${message.author.username} (${message.author.id}) ran command ${command}`);
+  log("log", `${message.author.username} (${message.author.id}) ran classic command ${command}`);
   const reference = {
     messageReference: {
       channelID: message.channel.id,
@@ -101,7 +101,7 @@ export default async (client, cluster, worker, ipc, message) => {
     await database.addCount(aliases.get(command) ?? command);
     const startTime = new Date();
     // eslint-disable-next-line no-unused-vars
-    const commandClass = new cmd(client, cluster, worker, ipc, message, parsed._, message.content.substring(prefix.length).trim().replace(command, "").trim(), (({ _, ...o }) => o)(parsed)); // we also provide the message content as a parameter for cases where we need more accuracy
+    const commandClass = new cmd(client, cluster, worker, ipc, { type: "classic", message, args: parsed._, content: message.content.substring(prefix.length).trim().replace(command, "").trim(), specialArgs: (({ _, ...o }) => o)(parsed) }); // we also provide the message content as a parameter for cases where we need more accuracy
     const result = await commandClass.run();
     const endTime = new Date();
     if ((endTime - startTime) >= 180000) reference.allowedMentions.repliedUser = true;
@@ -125,7 +125,7 @@ export default async (client, cluster, worker, ipc, message) => {
         }
       }
       if (result.file.length > fileSize) {
-        if (process.env.TEMPDIR !== "") {
+        if (process.env.TEMPDIR && process.env.TEMPDIR !== "") {
           const filename = `${Math.random().toString(36).substring(2, 15)}.${result.name.split(".")[1]}`;
           await promises.writeFile(`${process.env.TEMPDIR}/${filename}`, result.file);
           const imageURL = `${process.env.TMP_DOMAIN || "https://tmp.projectlounge.pw"}/${filename}`;
@@ -142,6 +142,8 @@ export default async (client, cluster, worker, ipc, message) => {
               },
             }]
           }, reference));
+        } else {
+          await client.createMessage(message.channel.id, "The resulting image was more than 8MB in size, so I can't upload it.");
         }
       } else {
         await client.createMessage(message.channel.id, Object.assign({

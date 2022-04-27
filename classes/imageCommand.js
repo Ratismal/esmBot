@@ -38,14 +38,15 @@ class ImageCommand extends Command {
   }
 
   async run() {
+    const timestamp = this.type === "classic" ? this.message.createdAt : Math.floor((this.interaction.id / 4194304) + 1420070400000);
     // check if this command has already been run in this channel with the same arguments, and we are awaiting its result
     // if so, don't re-run it
-    if (runningCommands.has(this.message.author.id) && (new Date(runningCommands.get(this.message.author.id)) - new Date(this.message.createdAt)) < 5000) {
+    if (runningCommands.has(this.author.id) && (new Date(runningCommands.get(this.author.id)) - new Date(timestamp)) < 5000) {
       return "Please slow down a bit.";
     }
     // before awaiting the command result, add this command to the set of running commands
-    runningCommands.set(this.message.author.id, this.message.createdAt);
-  
+    runningCommands.set(this.author.id, timestamp);
+
     const magickParams = {
       cmd: this.constructor.command,
       params: {}
@@ -53,15 +54,15 @@ class ImageCommand extends Command {
 
     if (this.constructor.requiresImage) {
       try {
-        const image = await imageDetect(this.client, this.message, true);
+        const image = await imageDetect(this.client, this.message, this.interaction, this.options, true);
         if (image === undefined) {
-          runningCommands.delete(this.message.author.id);
+          runningCommands.delete(this.author.id);
           return this.constructor.noImage;
         } else if (image.type === "large") {
-          runningCommands.delete(this.message.author.id);
+          runningCommands.delete(this.author.id);
           return "That image is too large (>= 25MB)! Try using a smaller image.";
         } else if (image.type === "tenorlimit") {
-          runningCommands.delete(this.message.author.id);
+          runningCommands.delete(this.author.id);
           return "I've been rate-limited by Tenor. Please try uploading your GIF elsewhere.";
         }
         magickParams.path = image.path;
@@ -70,15 +71,15 @@ class ImageCommand extends Command {
         magickParams.params.delay = image.delay ?? 0;
         if (this.constructor.requiresGIF) magickParams.onlyGIF = true;
       } catch (e) {
-        runningCommands.delete(this.message.author.id);
+        runningCommands.delete(this.author.id);
         throw e;
       }
-      
     }
 
     if (this.constructor.requiresText) {
-      if (this.args.length === 0 || !await this.criteria(this.args)) {
-        runningCommands.delete(this.message.author.id);
+      const text = this.type === "classic" ? this.args : this.options.text;
+      if (text.length === 0 || !await this.criteria(text)) {
+        runningCommands.delete(this.author.id);
         return this.constructor.noText;
       }
     }
@@ -93,10 +94,10 @@ class ImageCommand extends Command {
     }
 
     let status;
-    if (magickParams.params.type === "image/gif") {
+    if (magickParams.params.type === "image/gif" && this.type === "classic") {
       status = await this.processMessage(this.message);
     } else {
-      this.client.sendChannelTyping(this.message.channel.id);
+      await this.acknowledge();
     }
 
     try {
@@ -112,18 +113,43 @@ class ImageCommand extends Command {
       if (e === "No available servers") return "I can't seem to contact the image servers, they might be down or still trying to start up. Please wait a little bit.";
       throw e;
     } finally {
-      if (status && await this.client.getMessage(status.channel.id, status.id).catch(() => undefined)) await status.delete();
-      runningCommands.delete(this.message.author.id);
+      if (status && (status.channel.messages ? status.channel.messages.has(status.id) : await this.client.getMessage(status.channel.id, status.id).catch(() => undefined))) await status.delete();
+      runningCommands.delete(this.author.id);
     }
-    
+
   }
 
   processMessage(message) {
     return this.client.createMessage(message.channel.id, `${random(emotes) || process.env.PROCESSING_EMOJI || "<a:processing:479351417102925854>"} Processing... This might take a while`);
   }
 
+  static init() {
+    this.flags = [];
+    if (this.requiresText || this.textOptional) {
+      this.flags.push({
+        name: "text",
+        type: 3,
+        description: "The text to put on the image",
+        required: !this.textOptional
+      });
+    }
+    if (this.requiresImage) {
+      this.flags.push({
+        name: "image",
+        type: 11,
+        description: "An image/GIF attachment"
+      }, {
+        name: "link",
+        type: 3,
+        description: "An image/GIF URL"
+      });
+    }
+    return this;
+  }
+
   static requiresImage = true;
   static requiresText = false;
+  static textOptional = false;
   static requiresGIF = false;
   static noImage = "You need to provide an image/GIF!";
   static noText = "You need to provide some text!";

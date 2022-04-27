@@ -4,7 +4,7 @@ import Command from "../../classes/command.js";
 class EvalRawCommand extends Command {
   async run() {
     const owners = process.env.OWNER.split(",");
-    if (!owners.includes(this.message.author.id)) return "Only the bot owner can use evalraw!";
+    if (!owners.includes(this.author.id)) return "Only the bot owner can use evalraw!";
     const code = this.args.join(" ");
     try {
       const evaled = eval(code);
@@ -25,6 +25,7 @@ class EvalRawCommand extends Command {
   static description = "Executes JavaScript code (with raw output)";
   static aliases = ["run"];
   static arguments = ["[code]"];
+  static slashAllowed = false;
 }
 
 export default EvalRawCommand;

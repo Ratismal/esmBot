@@ -4,21 +4,14 @@ import * as logger from "../logger.js";
 import sqlite3 from "better-sqlite3";
 const connection = sqlite3(process.env.DB.replace("sqlite://", ""));
 
+const sqliteUpdates = [
+  "", // reserved
+  "ALTER TABLE guilds ADD COLUMN accessed int",
+  "ALTER TABLE guilds DROP COLUMN accessed"
+];
+
 export async function setup() {
-  let counts;
-  try {
-    counts = connection.prepare("SELECT * FROM counts").all();
-  } catch {
-    connection.prepare("CREATE TABLE counts ( command VARCHAR NOT NULL PRIMARY KEY, count integer NOT NULL )").run();
-    counts = [];
-  }
-
-  try {
-    connection.prepare("SELECT * FROM tags").all();
-  } catch {
-    connection.prepare("CREATE TABLE tags ( guild_id VARCHAR(30) NOT NULL, name text NOT NULL, content text NOT NULL, author VARCHAR(30) NOT NULL, UNIQUE(guild_id, name) )").run();
-  }
-
+  const counts = connection.prepare("SELECT * FROM counts").all();
   if (!counts) {
     for (const command of collections.commands.keys()) {
       connection.prepare("INSERT INTO counts (command, count) VALUES (?, ?)").run(command, 0);
@@ -43,6 +36,32 @@ export async function setup() {
 
 export async function stop() {
   connection.close();
+}
+
+export async function upgrade(logger) {
+  connection.prepare("CREATE TABLE IF NOT EXISTS guilds ( guild_id VARCHAR(30) NOT NULL PRIMARY KEY, prefix VARCHAR(15) NOT NULL, disabled text NOT NULL, disabled_commands text NOT NULL )").run();
+  connection.prepare("CREATE TABLE IF NOT EXISTS counts ( command VARCHAR NOT NULL PRIMARY KEY, count integer NOT NULL )").run();
+  connection.prepare("CREATE TABLE IF NOT EXISTS tags ( guild_id VARCHAR(30) NOT NULL, name text NOT NULL, content text NOT NULL, author VARCHAR(30) NOT NULL, UNIQUE(guild_id, name) )").run();
+
+  let version = connection.pragma("user_version", { simple: true });
+  if (version < (sqliteUpdates.length - 1)) {
+    logger.warn(`Migrating SQLite database at ${process.env.DB}, which is currently at version ${version}...`);
+    connection.prepare("BEGIN TRANSACTION").run();
+    try {
+      while (version < (sqliteUpdates.length - 1)) {
+        version++;
+        logger.warn(`Running version ${version} update script (${sqliteUpdates[version]})...`);
+        connection.prepare(sqliteUpdates[version]).run();
+      }
+      connection.pragma(`user_version = ${version}`); // insecure, but the normal templating method doesn't seem to work here
+      connection.prepare("COMMIT").run();
+    } catch (e) {
+      logger.error(`SQLite migration failed: ${e}`);
+      connection.prepare("ROLLBACK").run();
+      logger.error("Unable to start the bot, quitting now.");
+      return 1;
+    }
+  }
 }
 
 export async function fixGuild(guild) {

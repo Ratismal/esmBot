@@ -3,10 +3,12 @@ import { BaseClusterWorker } from "eris-fleet";
 // path stuff
 import { readdir } from "fs/promises";
 import { readFileSync } from "fs";
+import { resolve, dirname } from "path";
+import { fileURLToPath } from "url";
 // fancy loggings
 import { log, error } from "./utils/logger.js";
 // initialize command loader
-import { load } from "./utils/handler.js";
+import { load, update } from "./utils/handler.js";
 // lavalink stuff
 import { checkStatus, connect, status, connected } from "./utils/soundplayer.js";
 // database stuff
@@ -34,23 +36,27 @@ class Shard extends BaseClusterWorker {
     // register commands and their info
     const soundStatus = await checkStatus();
     log("info", "Attempting to load commands...");
-    for await (const commandFile of this.getFiles("./commands/")) {
+    for await (const commandFile of this.getFiles(resolve(dirname(fileURLToPath(import.meta.url)), "./commands/"))) {
       log("log", `Loading command from ${commandFile}...`);
       try {
-        await load(commandFile, soundStatus);
+        await load(this.bot, this.clusterID, this.workerID, this.ipc, commandFile, soundStatus);
       } catch (e) {
         error(`Failed to register command from ${commandFile}: ${e}`);
       }
     }
+    const commandArray = await update(this.bot, this.clusterID, this.workerID, this.ipc, soundStatus);
     log("info", "Finished loading commands.");
 
+    await database.setup(this.ipc);
+    await this.bot.bulkEditCommands(commandArray);
+
     // register events
-    log("info", `Attempting to load events...`);
-    for await (const file of this.getFiles("./events/")) {
+    log("info", "Attempting to load events...");
+    for await (const file of this.getFiles(resolve(dirname(fileURLToPath(import.meta.url)), "./events/"))) {
       log("log", `Loading event from ${file}...`);
       const eventArray = file.split("/");
       const eventName = eventArray[eventArray.length - 1].split(".")[0];
-      const { default: event } = await import(`./${file}`);
+      const { default: event } = await import(file);
       this.bot.on(eventName, event.bind(null, this.bot, this.clusterID, this.workerID, this.ipc));
     }
     log("info", "Finished loading events.");
@@ -67,8 +73,8 @@ class Shard extends BaseClusterWorker {
     this.ipc.register("reload", async (message) => {
       const path = paths.get(message);
       if (!path) return this.ipc.broadcast("reloadFail", { result: "I couldn't find that command!" });
-      const result = await load(path, await checkStatus());
-      if (result) return this.ipc.broadcast("reloadFail", { result });
+      const result = await load(this.bot, this.clusterID, this.workerID, this.ipc, path, await checkStatus(), true);
+      if (result !== message) return this.ipc.broadcast("reloadFail", { result });
       return this.ipc.broadcast("reloadSuccess");
     });
 
@@ -103,8 +109,6 @@ class Shard extends BaseClusterWorker {
     // connect to lavalink
     if (!status && !connected) connect(this.bot);
 
-    database.setup();
-
     this.activityChanger();
 
     log("info", `Started worker ${this.workerID}.`);
@@ -123,10 +127,11 @@ class Shard extends BaseClusterWorker {
   async* getFiles(dir) {
     const dirents = await readdir(dir, { withFileTypes: true });
     for (const dirent of dirents) {
+      const name = dir + (dir.charAt(dir.length - 1) !== "/" ? "/" : "") + dirent.name;
       if (dirent.isDirectory()) {
-        yield* this.getFiles(dir + dirent.name);
+        yield* this.getFiles(name);
       } else if (dirent.name.endsWith(".js")) {
-        yield dir + (dir.charAt(dir.length - 1) !== "/" ? "/" : "") + dirent.name;
+        yield name;
       }
     }
   }
