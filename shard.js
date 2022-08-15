@@ -10,13 +10,13 @@ import { log, error } from "./utils/logger.js";
 // initialize command loader
 import { load, update } from "./utils/handler.js";
 // lavalink stuff
-import { checkStatus, connect, status, connected } from "./utils/soundplayer.js";
+import { checkStatus, connect, reload, status, connected } from "./utils/soundplayer.js";
 // database stuff
 import database from "./utils/database.js";
 // command collections
 import { paths } from "./utils/collections.js";
 // playing messages
-const { messages } = JSON.parse(readFileSync(new URL("./messages.json", import.meta.url)));
+const { messages } = JSON.parse(readFileSync(new URL("./config/messages.json", import.meta.url)));
 // other stuff
 import { random } from "./utils/misc.js";
 // generate help page
@@ -83,7 +83,7 @@ class Shard extends BaseClusterWorker {
     this.ipc.register("soundreload", async () => {
       const soundStatus = await checkStatus();
       if (!soundStatus) {
-        const length = await connect(this.bot);
+        const length = reload();
         return this.ipc.broadcast("soundReloadSuccess", { length });
       } else {
         return this.ipc.broadcast("soundReloadFail");

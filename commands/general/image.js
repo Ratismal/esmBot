@@ -1,18 +1,18 @@
 import paginator from "../../utils/pagination/pagination.js";
 import { readFileSync } from "fs";
-const { searx } = JSON.parse(readFileSync(new URL("../../servers.json", import.meta.url)));
+const { searx } = JSON.parse(readFileSync(new URL("../../config/servers.json", import.meta.url)));
 import { random } from "../../utils/misc.js";
-import fetch from "node-fetch";
+import { request } from "undici";
 import Command from "../../classes/command.js";
 
 class ImageSearchCommand extends Command {
   async run() {
     if (this.channel.guild && !this.channel.permissionsOf(this.client.user.id).has("embedLinks")) return "I don't have the `Embed Links` permission!";
-    const query = this.type === "classic" ? this.args.join(" ") : this.options.query;
+    const query = this.options.query ?? this.args.join(" ");
     if (!query || !query.trim()) return "You need to provide something to search for!";
     await this.acknowledge();
     const embeds = [];
-    const rawImages = await fetch(`${random(searx)}/search?format=json&safesearch=2&categories=images&q=!goi%20!ddi%20${encodeURIComponent(query)}`).then(res => res.json());
+    const rawImages = await request(`${random(searx)}/search?format=json&safesearch=2&categories=images&q=!goi%20!ddi%20${encodeURIComponent(query)}`).then(res => res.body.json());
     if (rawImages.results.length === 0) return "I couldn't find any results!";
     const images = rawImages.results.filter((val) => !val.img_src.startsWith("data:"));
     for (const [i, value] of images.entries()) {

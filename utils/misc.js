@@ -14,7 +14,7 @@ const optionalReplace = (token) => {
 
 // clean(text) to clean message of any private info or mentions
 export async function clean(text) {
-  if (text && text.constructor && text.constructor.name == "Promise")
+  if (text?.constructor?.name == "Promise")
     text = await text;
   if (typeof text !== "string")
     text = util.inspect(text, { depth: 1 });
@@ -24,9 +24,9 @@ export async function clean(text) {
     .replaceAll("@", `@${String.fromCharCode(8203)}`);
 
   const { parsed } = config();
-  const imageServers = JSON.parse(fs.readFileSync(new URL("../servers.json", import.meta.url), { encoding: "utf8" })).image;
+  const imageServers = JSON.parse(fs.readFileSync(new URL("../config/servers.json", import.meta.url), { encoding: "utf8" })).image;
 
-  if (imageServers && imageServers.length !== 0) {
+  if (imageServers?.length !== 0) {
     for (const { server, auth } of imageServers) {
       text = text.replaceAll(server, optionalReplace(server));
       text = text.replaceAll(auth, optionalReplace(auth));

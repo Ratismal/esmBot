@@ -9,13 +9,12 @@ using namespace Magick;
 
 Napi::Value Tile(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
+  Napi::Object result = Napi::Object::New(env);
 
   try {
     Napi::Object obj = info[0].As<Napi::Object>();
     Napi::Buffer<char> data = obj.Get("data").As<Napi::Buffer<char>>();
     string type = obj.Get("type").As<Napi::String>().Utf8Value();
-    int delay =
-        obj.Has("delay") ? obj.Get("delay").As<Napi::Number>().Int32Value() : 0;
 
     Blob blob;
 
@@ -48,7 +47,7 @@ Napi::Value Tile(const Napi::CallbackInfo &info) {
       appendImages(&frame, montage.begin(), montage.end(), true);
       frame.repage();
       frame.scale(Geometry("800x800>"));
-      frame.animationDelay(delay == 0 ? image.animationDelay() : delay);
+      frame.animationDelay(image.animationDelay());
       mid.push_back(frame);
     }
 
@@ -63,14 +62,14 @@ Napi::Value Tile(const Napi::CallbackInfo &info) {
 
     writeImages(mid.begin(), mid.end(), &blob);
 
-    Napi::Object result = Napi::Object::New(env);
     result.Set("data", Napi::Buffer<char>::Copy(env, (char *)blob.data(),
                                                 blob.length()));
     result.Set("type", type);
-    return result;
   } catch (std::exception const &err) {
-    throw Napi::Error::New(env, err.what());
+    Napi::Error::New(env, err.what()).ThrowAsJavaScriptException();
   } catch (...) {
-    throw Napi::Error::New(env, "Unknown error");
+    Napi::Error::New(env, "Unknown error").ThrowAsJavaScriptException();
   }
+
+  return result;
 }

@@ -22,10 +22,12 @@ import Shard from "./shard.js";
 import ImageWorker from "./utils/services/image.js";
 import PrometheusWorker from "./utils/services/prometheus.js";
 // some utils
-import { readFileSync } from "fs";
+import { promises, readFileSync } from "fs";
 import winston from "winston";
+import "winston-daily-rotate-file";
 import { exec as baseExec } from "child_process";
 import { promisify } from "util";
+
 const exec = promisify(baseExec);
 // database stuff
 import database from "./utils/database.js";
@@ -65,6 +67,7 @@ const Admiral = new Fleet({
   BotWorker: Shard,
   token: `Bot ${process.env.TOKEN}`,
   fetchTimeout: 900000,
+  maxConcurrencyOverride: 1,
   startingStatus: {
     status: "idle",
     game: {
@@ -75,24 +78,6 @@ const Admiral = new Fleet({
     blacklist: ["stats_update"]
   },
   clientOptions: {
-    disableEvents: {
-      CHANNEL_DELETE: true,
-      GUILD_BAN_REMOVE: true,
-      TYPING_START: true,
-      MESSAGE_DELETE_BULK: true,
-      WEBHOOKS_UPDATE: true,
-      STAGE_INSTANCE_CREATE: true,
-      STAGE_INSTANCE_DELETE: true,
-      STAGE_INSTANCE_UPDATE: true,
-      MESSAGE_REACTION_ADD: true,
-      MESSAGE_REACTION_REMOVE: true,
-      MESSAGE_REACTION_REMOVE_ALL: true,
-      MESSAGE_REACTION_REMOVE_EMOJI: true,
-      INVITE_CREATE: true,
-      INVITE_DELETE: true,
-      THREAD_UPDATE: true,
-      THREAD_DELETE: true
-    },
     allowedMentions: {
       everyone: false,
       roles: false,
@@ -109,7 +94,8 @@ const Admiral = new Fleet({
     ],
     stats: {
       requestTimeout: 30000
-    }
+    },
+    connectionTimeout: 30000
   },
   useCentralRequestHandler: process.env.DEBUG_LOG ? false : true, // workaround for eris-fleet weirdness
   services: [
@@ -129,8 +115,8 @@ if (isMaster) {
     },
     transports: [
       new winston.transports.Console({ format: winston.format.colorize({ all: true }), stderrLevels: ["error", "warn"] }),
-      new winston.transports.File({ filename: "logs/error.log", level: "error" }),
-      new winston.transports.File({ filename: "logs/main.log" })
+      new winston.transports.DailyRotateFile({ filename: "logs/error-%DATE%.log", level: "error", zippedArchive: true, maxSize: 4194304, maxFiles: 8 }),
+      new winston.transports.DailyRotateFile({ filename: "logs/main-%DATE%.log", zippedArchive: true, maxSize: 4194304, maxFiles: 8 })
     ],
     level: process.env.DEBUG_LOG ? "debug" : "main",
     format: winston.format.combine(
@@ -170,5 +156,30 @@ if (isMaster) {
         shardCount: m.shardCount
       });
     });
+  }
+
+  // process the threshold into bytes early
+  if (process.env.TEMPDIR && process.env.THRESHOLD) {
+    const matched = process.env.THRESHOLD.match(/(\d+)([KMGT])/);
+    const sizes = {
+      K: 1024,
+      M: 1048576,
+      G: 1073741824,
+      T: 1099511627776
+    };
+    if (matched && matched[1] && matched[2]) {
+      process.env.THRESHOLD = matched[1] * sizes[matched[2]];
+    } else {
+      logger.error("Invalid THRESHOLD config.");
+      process.env.THRESHOLD = undefined;
+    }
+    const dirstat = (await promises.readdir(process.env.TEMPDIR)).map((file) => {
+      return promises.stat(`${process.env.TEMPDIR}/${file}`).then((stats) => stats.size);
+    });
+    const size = await Promise.all(dirstat);
+    const reduced = size.reduce((a, b) => {
+      return a + b;
+    }, 0);
+    Admiral.centralStore.set("dirSizeCache", reduced);
   }
 }

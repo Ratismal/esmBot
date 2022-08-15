@@ -1,43 +1,48 @@
-#include <Magick++.h>
 #include <napi.h>
 
-#include <list>
+#include <vips/vips8>
 
 using namespace std;
-using namespace Magick;
+using namespace vips;
 
 Napi::Value Sonic(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
+  Napi::Object result = Napi::Object::New(env);
 
   try {
     Napi::Object obj = info[0].As<Napi::Object>();
     string text = obj.Get("text").As<Napi::String>().Utf8Value();
     string basePath = obj.Get("basePath").As<Napi::String>().Utf8Value();
 
-    Blob blob;
+    string assetPath = basePath + "assets/images/sonic.jpg";
+    VImage bg = VImage::new_from_file(assetPath.c_str());
 
-    Image image;
-    Image text_image;
-    text_image.backgroundColor("none");
-    text_image.fontPointsize(72);
-    text_image.textGravity(Magick::CenterGravity);
-    text_image.font("Bitstream Vera Sans");
-    text_image.read("pango:<span foreground='white'>" + text + "</span>");
-    text_image.resize(Geometry(474, 332));
-    text_image.extent(Geometry("1024x538-435-145"), Magick::CenterGravity);
-    image.read(basePath + "assets/images/sonic.jpg");
-    image.composite(text_image, Geometry("+160+10"), Magick::OverCompositeOp);
-    image.magick("PNG");
-    image.write(&blob);
+    VImage textImage =
+        VImage::text(("<span foreground=\"white\">" + text + "</span>").c_str(),
+                     VImage::option()
+                         ->set("rgba", true)
+                         ->set("align", VIPS_ALIGN_CENTRE)
+                         ->set("font", "Bitstream Vera Sans")
+                         ->set("width", 542)
+                         ->set("height", 390))
+            .gravity(VIPS_COMPASS_DIRECTION_CENTRE, 542, 390);
 
-    Napi::Object result = Napi::Object::New(env);
-    result.Set("data", Napi::Buffer<char>::Copy(env, (char *)blob.data(),
-                                                blob.length()));
+    VImage out = bg.composite2(textImage, VIPS_BLEND_MODE_OVER,
+                               VImage::option()->set("x", 391)->set("y", 84));
+
+    void *buf;
+    size_t length;
+    out.write_to_buffer(".png", &buf, &length);
+
+    result.Set("data", Napi::Buffer<char>::Copy(env, (char *)buf, length));
     result.Set("type", "png");
-    return result;
   } catch (std::exception const &err) {
-    throw Napi::Error::New(env, err.what());
+    Napi::Error::New(env, err.what()).ThrowAsJavaScriptException();
   } catch (...) {
-    throw Napi::Error::New(env, "Unknown error");
+    Napi::Error::New(env, "Unknown error").ThrowAsJavaScriptException();
   }
+
+  vips_error_clear();
+  vips_thread_shutdown();
+  return result;
 }

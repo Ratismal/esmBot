@@ -28,7 +28,8 @@ export async function load(client, cluster, worker, ipc, command, soundStatus, s
     aliases: props.aliases,
     params: props.arguments,
     flags: props.flags,
-    slashAllowed: props.slashAllowed
+    slashAllowed: props.slashAllowed,
+    directAllowed: props.directAllowed
   });
 
   const categoryCommands = categories.get(category);
@@ -69,15 +70,17 @@ export async function update() {
         aliases: cmd.aliases,
         params: cmd.arguments,
         flags: cmd.flags,
-        slashAllowed: cmd.slashAllowed
+        slashAllowed: cmd.slashAllowed,
+        directAllowed: cmd.directAllowed
       };
       info.set(name, cmdInfo);
     }
-    if (cmdInfo && cmdInfo.slashAllowed) commandArray.push({
+    if (cmdInfo?.slashAllowed) commandArray.push({
       name,
       type: 1,
       description: cmdInfo.description,
-      options: cmdInfo.flags
+      options: cmdInfo.flags,
+      dm_permission: cmdInfo.directAllowed
     });
   }
   return commandArray;

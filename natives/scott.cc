@@ -9,14 +9,13 @@ using namespace Magick;
 
 Napi::Value Scott(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
+  Napi::Object result = Napi::Object::New(env);
 
   try {
     Napi::Object obj = info[0].As<Napi::Object>();
     Napi::Buffer<char> data = obj.Get("data").As<Napi::Buffer<char>>();
     string type = obj.Get("type").As<Napi::String>().Utf8Value();
     string basePath = obj.Get("basePath").As<Napi::String>().Utf8Value();
-    int delay =
-        obj.Has("delay") ? obj.Get("delay").As<Napi::Number>().Int32Value() : 0;
 
     Blob blob;
 
@@ -46,7 +45,7 @@ Napi::Value Scott(const Napi::CallbackInfo &info) {
       watermark_new.composite(image, Geometry("-110+83"),
                               Magick::OverCompositeOp);
       watermark_new.magick(type);
-      watermark_new.animationDelay(delay == 0 ? image.animationDelay() : delay);
+      watermark_new.animationDelay(image.animationDelay());
       mid.push_back(watermark_new);
     }
 
@@ -61,14 +60,14 @@ Napi::Value Scott(const Napi::CallbackInfo &info) {
 
     writeImages(mid.begin(), mid.end(), &blob);
 
-    Napi::Object result = Napi::Object::New(env);
     result.Set("data", Napi::Buffer<char>::Copy(env, (char *)blob.data(),
                                                 blob.length()));
     result.Set("type", type);
-    return result;
   } catch (std::exception const &err) {
-    throw Napi::Error::New(env, err.what());
+    Napi::Error::New(env, err.what()).ThrowAsJavaScriptException();
   } catch (...) {
-    throw Napi::Error::New(env, "Unknown error");
+    Napi::Error::New(env, "Unknown error").ThrowAsJavaScriptException();
   }
+
+  return result;
 }

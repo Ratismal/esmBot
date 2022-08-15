@@ -1,9 +1,9 @@
-import { promises } from "fs";
 import database from "../utils/database.js";
 import { log, error as _error } from "../utils/logger.js";
 import { prefixCache, aliases, disabledCache, disabledCmdCache, commands } from "../utils/collections.js";
 import parseCommand from "../utils/parseCommand.js";
 import { clean } from "../utils/misc.js";
+import { upload } from "../utils/tempimages.js";
 
 // run when someone sends a message
 export default async (client, cluster, worker, ipc, message) => {
@@ -43,7 +43,7 @@ export default async (client, cluster, worker, ipc, message) => {
       prefix = prefixCandidate;
     }
   } else {
-    prefix = "";
+    prefix = process.env.PREFIX;
   }
 
   // ignore other stuff
@@ -83,6 +83,9 @@ export default async (client, cluster, worker, ipc, message) => {
   // check if command exists and if it's enabled
   const cmd = commands.get(aliased ?? command);
   if (!cmd) return;
+
+  // block certain commands from running in DMs
+  if (!cmd.directAllowed && !message.channel.guild) return;
 
   // actually run the command
   log("log", `${message.author.username} (${message.author.id}) ran classic command ${command}`);
@@ -126,22 +129,7 @@ export default async (client, cluster, worker, ipc, message) => {
       }
       if (result.file.length > fileSize) {
         if (process.env.TEMPDIR && process.env.TEMPDIR !== "") {
-          const filename = `${Math.random().toString(36).substring(2, 15)}.${result.name.split(".")[1]}`;
-          await promises.writeFile(`${process.env.TEMPDIR}/${filename}`, result.file);
-          const imageURL = `${process.env.TMP_DOMAIN || "https://tmp.projectlounge.pw"}/${filename}`;
-          await client.createMessage(message.channel.id, Object.assign({
-            embeds: [{
-              color: 16711680,
-              title: "Here's your image!",
-              url: imageURL,
-              image: {
-                url: imageURL
-              },
-              footer: {
-                text: "The result image was more than 8MB in size, so it was uploaded to an external site instead."
-              },
-            }]
-          }, reference));
+          await upload(client, ipc, result, message);
         } else {
           await client.createMessage(message.channel.id, "The resulting image was more than 8MB in size, so I can't upload it.");
         }
@@ -165,7 +153,7 @@ export default async (client, cluster, worker, ipc, message) => {
         content: "The request timed out before I could download that image. Try uploading your image somewhere else or reducing its size."
       }, reference));
     } else {
-      _error(`Error occurred with command message ${message.cleanContent}: ${error.toString()}`);
+      _error(`Error occurred with command message ${message.cleanContent}: ${error.stack || error}`);
       try {
         await client.createMessage(message.channel.id, Object.assign({
           content: "Uh oh! I ran into an error while running this command. Please report the content of the attached file at the following link or on the esmBot Support server: <https://github.com/esmBot/esmBot/issues>"

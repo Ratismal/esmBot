@@ -1,15 +1,15 @@
 import urlCheck from "../../utils/urlcheck.js";
-import fetch from "node-fetch";
+import { request } from "undici";
 import Command from "../../classes/command.js";
 
 class LengthenCommand extends Command {
   async run() {
     await this.acknowledge();
-    const input = this.type === "classic" ? this.args.join(" ") : this.options.url;
+    const input = this.options.url ?? this.args.join(" ");
     if (!input || !input.trim() || !urlCheck(input)) return "You need to provide a short URL to lengthen!";
     if (urlCheck(input)) {
-      const url = await fetch(encodeURI(input), { redirect: "manual" });
-      return url.headers.get("location") || input;
+      const url = await request(encodeURI(input), { method: "HEAD" });
+      return url.headers.location || input;
     } else {
       return "That isn't a URL!";
     }

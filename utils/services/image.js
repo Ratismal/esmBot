@@ -6,7 +6,7 @@ import { fileURLToPath } from "url";
 import { Worker } from "worker_threads";
 import { createRequire } from "module";
 import { createServer } from "http";
-import fetch from "node-fetch";
+import { request } from "undici";
 import EventEmitter from "events";
 
 // only requiring this to work around an issue regarding worker threads
@@ -23,7 +23,7 @@ class ImageWorker extends BaseServiceWorker {
 
     if (process.env.API_TYPE === "ws") {
       this.connections = new Map();
-      this.servers = JSON.parse(fs.readFileSync(new URL("../../servers.json", import.meta.url), { encoding: "utf8" })).image;
+      this.servers = JSON.parse(fs.readFileSync(new URL("../../config/servers.json", import.meta.url), { encoding: "utf8" })).image;
       this.nextID = 0;
     } else if (process.env.API_TYPE === "azure") {
       this.jobs = new Map();
@@ -115,7 +115,7 @@ class ImageWorker extends BaseServiceWorker {
   }
 
   async repopulate() {
-    const data = await fs.promises.readFile(new URL("../../servers.json", import.meta.url), { encoding: "utf8" });
+    const data = await fs.promises.readFile(new URL("../../config/servers.json", import.meta.url), { encoding: "utf8" });
     this.servers = JSON.parse(data).image;
     return;
   }
@@ -153,7 +153,7 @@ class ImageWorker extends BaseServiceWorker {
       if (connection.conn.readyState !== 0 && connection.conn.readyState !== 1) {
         continue;
       }
-      if (object.params.type && connection.formats[object.cmd] && !connection.formats[object.cmd].includes(object.params.type)) continue;
+      if (object.params.type && !connection.formats[object.cmd]?.includes(object.params.type)) continue;
       idealServers.push({
         addr: address,
         load: connection.njobs / connection.max
@@ -219,7 +219,7 @@ class ImageWorker extends BaseServiceWorker {
       }
     } else if (process.env.API_TYPE === "azure") {
       object.callback = `${process.env.AZURE_CALLBACK_URL}:${this.port}/callback`;
-      const response = await fetch(`${process.env.AZURE_URL}/api/orchestrators/ImageOrchestrator`, { method: "POST", body: JSON.stringify(object) }).then(r => r.json());
+      const response = await request(`${process.env.AZURE_URL}/api/orchestrators/ImageOrchestrator`, { method: "POST", body: JSON.stringify(object) }).then(r => r.body.json());
       const event = new EventEmitter();
       this.jobs.set(response.id, event);
       return await this.waitForAzure(event);

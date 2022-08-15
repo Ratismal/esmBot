@@ -9,7 +9,8 @@ const exec = promisify(baseExec);
 
 class InfoCommand extends Command {
   async run() {
-    const owner = await this.ipc.fetchUser(process.env.OWNER.split(",")[0]);
+    let owner = await this.ipc.fetchUser(process.env.OWNER.split(",")[0]);
+    if (!owner) owner = await this.client.getRESTUser(process.env.OWNER.split(",")[0]);
     const stats = await this.ipc.getStats();
     return {
       embeds: [{
@@ -29,7 +30,7 @@ class InfoCommand extends Command {
         },
         {
           name: "💬 Total Servers:",
-          value: stats && stats.guilds ? stats.guilds : `${this.client.guilds.size} (for this cluster only)`
+          value: stats?.guilds ? stats.guilds : `${this.client.guilds.size} (for this cluster only)`
         },
         {
           name: "✅ Official Server:",

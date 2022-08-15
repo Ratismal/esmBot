@@ -13,7 +13,7 @@ class StatsCommand extends Command {
   async run() {
     const uptime = process.uptime() * 1000;
     const connUptime = this.client.uptime;
-    const owner = await this.ipc.fetchUser(process.env.OWNER.split(",")[0]);
+    const owner = await this.client.getRESTUser(process.env.OWNER.split(",")[0]);
     const stats = await this.ipc.getStats();
     return {
       embeds: [{
@@ -29,12 +29,12 @@ class StatsCommand extends Command {
         },
         {
           "name": "Cluster Memory Usage",
-          "value": stats && stats.clusters[this.cluster] ? `${stats.clusters[this.cluster].ram.toFixed(2)} MB` : `${(process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2)} MB`,
+          "value": stats?.clusters[this.cluster] ? `${stats.clusters[this.cluster].ram.toFixed(2)} MB` : `${(process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2)} MB`,
           "inline": true
         },
         {
           "name": "Total Memory Usage",
-          "value": stats && stats.totalRam ? `${stats.totalRam.toFixed(2)} MB` : "Unknown",
+          "value": stats?.totalRam ? `${stats.totalRam.toFixed(2)} MB` : "Unknown",
           "inline": true
         },
         {
@@ -72,7 +72,7 @@ class StatsCommand extends Command {
         },
         {
           "name": "Servers",
-          "value": stats && stats.guilds ? stats.guilds : `${this.client.guilds.size} (for this cluster only)`,
+          "value": stats?.guilds ? stats.guilds : `${this.client.guilds.size} (for this cluster only)`,
           "inline": true
         }
         ]

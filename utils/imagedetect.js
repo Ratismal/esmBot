@@ -1,8 +1,5 @@
-import fetch from "node-fetch";
+import { request } from "undici";
 import { getType } from "./image.js";
-import { exec } from "child_process";
-import { promisify } from "util";
-const execPromise = promisify(exec);
 
 const tenorURLs = [
   "tenor.com",
@@ -33,25 +30,30 @@ const gfycatURLs = [
   "giant.gfycat.com"
 ];
 
+const combined = [...tenorURLs, ...giphyURLs, ...giphyMediaURLs, ...imgurURLs, ...gfycatURLs];
+
 const imageFormats = ["image/jpeg", "image/png", "image/webp", "image/gif", "large"];
 const videoFormats = ["video/mp4", "video/webm", "video/mov"];
 
 // gets the proper image paths
-const getImage = async (image, image2, video, extraReturnTypes, gifv = false) => {
+const getImage = async (image, image2, video, extraReturnTypes, gifv = false, type = null, link = false) => {
   try {
+    const fileNameSplit = new URL(image).pathname.split("/");
+    const fileName = fileNameSplit[fileNameSplit.length - 1];
+    const fileNameNoExtension = fileName.slice(0, fileName.lastIndexOf("."));
     const payload = {
       url: image2,
-      path: image
+      path: image,
+      name: fileNameNoExtension
     };
-    if (gifv) {
-      const host = new URL(image2).host;
+    const host = new URL(image2).host;
+    if (gifv || (link && combined.includes(host))) {
       if (tenorURLs.includes(host)) {
         // Tenor doesn't let us access a raw GIF without going through their API,
-        // so we use that if there's a key in the config and fall back to using the MP4 if there isn't
-        // Note that MP4 conversion requires an ImageMagick build that supports MPEG decoding
+        // so we use that if there's a key in the config
         if (process.env.TENOR !== "") {
-          const data = await fetch(`https://g.tenor.com/v1/gifs?ids=${image2.split("-").pop()}&media_filter=minimal&limit=1&key=${process.env.TENOR}`);
-          if (data.status === 429) {
+          const data = await request(`https://tenor.googleapis.com/v2/posts?ids=${image2.split("-").pop()}&media_filter=gif&limit=1&key=${process.env.TENOR}`);
+          if (data.statusCode === 429) {
             if (extraReturnTypes) {
               payload.type = "tenorlimit";
               return payload;
@@ -59,12 +61,9 @@ const getImage = async (image, image2, video, extraReturnTypes, gifv = false) =>
               return;
             }
           }
-          const json = await data.json();
-          if (json.error) throw Error(json.error);
-          payload.path = json.results[0].media[0].gif.url;
-        } else {
-          const delay = (await execPromise(`ffprobe -v 0 -of csv=p=0 -select_streams v:0 -show_entries stream=r_frame_rate ${image}`)).stdout.replace("\n", "");
-          payload.delay = (100 / delay.split("/")[0]) * delay.split("/")[1];
+          const json = await data.body.json();
+          if (json.error) throw Error(json.error.message);
+          payload.path = json.results[0].media_formats.gif.url;
         }
       } else if (giphyURLs.includes(host)) {
         // Can result in an HTML page instead of a GIF
@@ -80,10 +79,10 @@ const getImage = async (image, image2, video, extraReturnTypes, gifv = false) =>
       }
       payload.type = "image/gif";
     } else if (video) {
-      payload.type = await getType(payload.path, extraReturnTypes);
+      payload.type = type ?? await getType(payload.path, extraReturnTypes);
       if (!payload.type || (!videoFormats.includes(payload.type) && !imageFormats.includes(payload.type))) return;
     } else {
-      payload.type = await getType(payload.path, extraReturnTypes);
+      payload.type = type ?? await getType(payload.path, extraReturnTypes);
       if (!payload.type || !imageFormats.includes(payload.type)) return;
     }
     return payload;
@@ -133,10 +132,11 @@ export default async (client, cmdMessage, interaction, options, extraReturnTypes
     // we can get a raw attachment or a URL in the interaction itself
     if (options) {
       if (options.image) {
-        const result = await getImage(interaction.data.resolved.attachments[options.image].proxy_url, interaction.data.resolved.attachments[options.image].url, video);
+        const attachment = interaction.data.resolved.attachments.get(options.image);
+        const result = await getImage(attachment.proxyUrl, attachment.url, video, attachment.contentType);
         if (result !== false) return result;
       } else if (options.link) {
-        const result = await getImage(options.link, options.link, video);
+        const result = await getImage(options.link, options.link, video, extraReturnTypes, false, null, true);
         if (result !== false) return result;
       }
     }

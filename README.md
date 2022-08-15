@@ -1,4 +1,4 @@
-# <img src="https://github.com/esmBot/esmBot/raw/master/esmbot.png" width="128"> esmBot
+# <img src="https://github.com/esmBot/esmBot/raw/master/docs/assets/esmbot.png" width="128"> esmBot
 [![esmBot Support](https://discordapp.com/api/guilds/592399417676529688/embed.png)](https://discord.gg/vfFM7YT) ![GitHub license](https://img.shields.io/github/license/esmBot/esmBot.svg)
 
 
@@ -11,7 +11,7 @@ You can invite the bot to your server using this link: https://projectlounge.pw/
 
 A command list can be found [here](https://projectlounge.pw/esmBot/help.html).
 
-If you want to self-host the bot, a guide can be found [here](https://github.com/esmBot/esmBot/wiki/Setup).
+If you want to self-host the bot, a guide can be found [here](https://esmbot.github.io/esmBot/setup).
 
 ## Credits
 Icon by [Steel](https://twitter.com/MintBurrow).

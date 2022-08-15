@@ -2,7 +2,7 @@ import Command from "./command.js";
 import imageDetect from "../utils/imagedetect.js";
 import { runningCommands } from "../utils/collections.js";
 import { readFileSync } from "fs";
-const { emotes } = JSON.parse(readFileSync(new URL("../messages.json", import.meta.url)));
+const { emotes } = JSON.parse(readFileSync(new URL("../config/messages.json", import.meta.url)));
 import { random } from "../utils/misc.js";
 
 class ImageCommand extends Command {
@@ -52,6 +52,10 @@ class ImageCommand extends Command {
       params: {}
     };
 
+    if (this.type === "application") {
+      await this.acknowledge();
+    }
+
     if (this.constructor.requiresImage) {
       try {
         const image = await imageDetect(this.client, this.message, this.interaction, this.options, true);
@@ -68,7 +72,7 @@ class ImageCommand extends Command {
         magickParams.path = image.path;
         magickParams.params.type = image.type;
         magickParams.url = image.url; // technically not required but can be useful for text filtering
-        magickParams.params.delay = image.delay ?? 0;
+        magickParams.name = image.name;
         if (this.constructor.requiresGIF) magickParams.onlyGIF = true;
       } catch (e) {
         runningCommands.delete(this.author.id);
@@ -77,27 +81,22 @@ class ImageCommand extends Command {
     }
 
     if (this.constructor.requiresText) {
-      const text = this.type === "classic" ? this.args : this.options.text;
-      if (text.length === 0 || !await this.criteria(text)) {
+      const text = this.options.text ?? this.args.join(" ").trim();
+      if (text.length === 0 || !await this.criteria(text, magickParams.url)) {
         runningCommands.delete(this.author.id);
         return this.constructor.noText;
       }
     }
 
-    switch (typeof this.params) {
-      case "function":
-        Object.assign(magickParams.params, this.params(magickParams.url, magickParams.delay));
-        break;
-      case "object":
-        Object.assign(magickParams.params, this.params);
-        break;
+    if (typeof this.params === "function") {
+      Object.assign(magickParams.params, this.params(magickParams.url, magickParams.name));
+    } else if (typeof this.params === "object") {
+      Object.assign(magickParams.params, this.params);
     }
 
     let status;
     if (magickParams.params.type === "image/gif" && this.type === "classic") {
       status = await this.processMessage(this.message);
-    } else {
-      await this.acknowledge();
     }
 
     try {
@@ -146,6 +145,8 @@ class ImageCommand extends Command {
     }
     return this;
   }
+
+  static allowedFonts = ["futura", "impact", "helvetica", "arial", "roboto", "noto", "times", "comic sans ms"];
 
   static requiresImage = true;
   static requiresText = false;

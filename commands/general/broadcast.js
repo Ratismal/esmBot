@@ -6,8 +6,8 @@ class BroadcastCommand extends Command {
     return new Promise((resolve) => {
       const owners = process.env.OWNER.split(",");
       if (!owners.includes(this.author.id)) return "Only the bot owner can broadcast messages!";
-      const message = this.type === "classic" ? this.args.join(" ") : this.options.message;
-      if (message && message.trim()) {
+      const message = this.options.message ?? this.args.join(" ");
+      if (message?.trim()) {
         this.ipc.broadcast("playbroadcast", message);
         this.ipc.register("broadcastSuccess", () => {
           this.ipc.unregister("broadcastSuccess");

@@ -17,20 +17,21 @@ export async function generateList() {
     const description = info.get(command).description;
     const params = info.get(command).params;
     if (category === "tags") {
-      const subCommands = [...Object.keys(description)];
+      const subCommands = info.get(command).flags;
+      categories.tags.push(`**tags** ${params.default} - ${description}`);
       for (const subCommand of subCommands) {
-        categories.tags.push(`**tags${subCommand !== "default" ? ` ${subCommand}` : ""}**${params[subCommand] ? ` ${params[subCommand]}` : ""} - ${description[subCommand]}`);
+        categories.tags.push(`**tags ${subCommand.name}**${params[subCommand.name] ? ` ${params[subCommand.name].join(" ")}` : ""} - ${subCommand.description}`);
       }
     } else {
       if (!categories[category]) categories[category] = [];
-      categories[category].push(`**${command}**${params ? ` ${params}` : ""} - ${description}`);
+      categories[category].push(`**${command}**${params ? ` ${params.join(" ")}` : ""} - ${description}`);
     }
   }
   generated = true;
 }
 
 export async function createPage(output) {
-  let template = `# <img src="https://raw.githubusercontent.com/esmBot/esmBot/master/esmbot.png" width="64"> esmBot${process.env.NODE_ENV === "development" ? " Dev" : ""} Command List
+  let template = `# <img src="https://raw.githubusercontent.com/esmBot/esmBot/master/docs/assets/esmbot.png" width="64"> esmBot${process.env.NODE_ENV === "development" ? " Dev" : ""} Command List
 
 This page was last generated on \`${new Date().toString()}\`.
 

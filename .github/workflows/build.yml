@@ -11,28 +11,46 @@ env:
 
 jobs:
   linux:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
     - name: Checkout
       uses: actions/checkout@v1
     - name: Setup Node.js environment
       uses: actions/setup-node@v2.1.2
-    - name: Install ImageMagick # necessary because ubuntu doesn't include IM7 in its repository
-      run: git clone https://github.com/ImageMagick/ImageMagick && cd ImageMagick && ./configure --with-magick-plus-plus=yes && make -j`nproc` && sudo make install && sudo ldconfig /usr/local/lib
+      with:
+        cache: 'pnpm'
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v2.2.2
+      with:
+        version: 7
+    - name: Install dependencies
+      run: sudo apt install libvips-dev libmagick++-dev
     - name: Build
-      run: npm install && npm run build
+      run: pnpm install --config.strict-peer-dependencies=false && pnpm run build
 
-  win32:
+  win64:
     runs-on: windows-latest
     steps:
     - name: Checkout
       uses: actions/checkout@v1
+    - name: Setup MSYS2
+      uses: msys2/setup-msys2@v2
+      with:
+        msystem: MINGW64
+        path-type: inherit
+        update: true
+        install: git mingw-w64-x86_64-cc mingw-w64-x86_64-libvips mingw-w64-x86_64-imagemagick
     - name: Setup Node.js environment
       uses: actions/setup-node@v2.1.2
-    - name: Install ImageMagick
-      run: choco install imagemagick -PackageParameters InstallDevelopmentHeaders=true
+      with:
+        cache: 'pnpm'
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v2.2.2
+      with:
+        version: 7
     - name: Build
-      run: npm install && npm run build
+      shell: msys2 {0}
+      run: $PNPM_HOME/pnpm install --config.strict-peer-dependencies=false && $PNPM_HOME/pnpm run build
 
   darwin:
     runs-on: macos-latest
@@ -41,7 +59,13 @@ jobs:
       uses: actions/checkout@v1
     - name: Setup Node.js environment
       uses: actions/setup-node@v2.1.2
-    - name: Install ImageMagick
-      run: brew install imagemagick
+      with:
+        cache: 'pnpm'
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v2.2.2
+      with:
+        version: 7
+    - name: Install dependencies
+      run: brew install imagemagick vips
     - name: Build
-      run: npm install && npm run build
+      run: pnpm install --config.strict-peer-dependencies=false && pnpm run build
