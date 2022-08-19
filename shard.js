@@ -48,8 +48,11 @@ class Shard extends BaseClusterWorker {
     log("info", "Finished loading commands.");
 
     await database.setup(this.ipc);
-    await this.bot.bulkEditCommands(commandArray);
-
+    try {
+      await this.bot.bulkEditCommands(commandArray);
+    } catch { 
+      console.error('Could not register commands.');
+    }
     // register events
     log("info", "Attempting to load events...");
     for await (const file of this.getFiles(resolve(dirname(fileURLToPath(import.meta.url)), "./events/"))) {
