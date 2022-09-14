@@ -8,7 +8,7 @@ import { fileURLToPath } from "url";
 // fancy loggings
 import { log, error } from "./utils/logger.js";
 // initialize command loader
-import { load, update } from "./utils/handler.js";
+import { load, send } from "./utils/handler.js";
 // lavalink stuff
 import { checkStatus, connect, reload, status, connected } from "./utils/soundplayer.js";
 // database stuff
@@ -17,6 +17,8 @@ import database from "./utils/database.js";
 import { paths } from "./utils/collections.js";
 // playing messages
 const { messages } = JSON.parse(readFileSync(new URL("./config/messages.json", import.meta.url)));
+// command config
+const { types } = JSON.parse(readFileSync(new URL("./config/commands.json", import.meta.url)));
 // other stuff
 import { random } from "./utils/misc.js";
 // generate help page
@@ -29,22 +31,35 @@ class Shard extends BaseClusterWorker {
     super(bot);
 
     console.info = (str) => this.ipc.sendToAdmiral("info", str);
+    this.playingSuffix = types.classic ? ` | @${this.bot.user.username} help` : "";
     this.init();
   }
 
   async init() {
+    if (!types.classic && !types.application) {
+      error("Both classic and application commands are disabled! Please enable at least one command type in config/commands.json.");
+      this.ipc.totalShutdown(true);
+      return;
+    }
     // register commands and their info
     const soundStatus = await checkStatus();
     log("info", "Attempting to load commands...");
     for await (const commandFile of this.getFiles(resolve(dirname(fileURLToPath(import.meta.url)), "./commands/"))) {
       log("log", `Loading command from ${commandFile}...`);
       try {
-        await load(this.bot, this.clusterID, this.workerID, this.ipc, commandFile, soundStatus);
+        await load(this.bot, commandFile, soundStatus);
       } catch (e) {
         error(`Failed to register command from ${commandFile}: ${e}`);
       }
     }
-    const commandArray = await update(this.bot, this.clusterID, this.workerID, this.ipc, soundStatus);
+    if (types.application) {
+      try {
+        await send(this.bot);
+      } catch (e) {
+        log("error", e);
+        log("error", "Failed to send command data to Discord, slash/message commands may be unavailable.");
+      }
+    }
     log("info", "Finished loading commands.");
 
     await database.setup(this.ipc);
@@ -53,12 +68,17 @@ class Shard extends BaseClusterWorker {
     } catch { 
       console.error('Could not register commands.');
     }
+
     // register events
     log("info", "Attempting to load events...");
     for await (const file of this.getFiles(resolve(dirname(fileURLToPath(import.meta.url)), "./events/"))) {
       log("log", `Loading event from ${file}...`);
       const eventArray = file.split("/");
       const eventName = eventArray[eventArray.length - 1].split(".")[0];
+      if (eventName === "interactionCreate" && !types.application) {
+        log("warn", `Skipped loading event from ${file} because application commands are disabled`);
+        continue;
+      }
       const { default: event } = await import(file);
       this.bot.on(eventName, event.bind(null, this.bot, this.clusterID, this.workerID, this.ipc));
     }
@@ -66,7 +86,7 @@ class Shard extends BaseClusterWorker {
 
     // generate docs
     if (process.env.OUTPUT && process.env.OUTPUT !== "") {
-      await generateList();
+      generateList();
       if (this.clusterID === 0) {
         await createPage(process.env.OUTPUT);
         log("info", "The help docs have been generated.");
@@ -76,12 +96,14 @@ class Shard extends BaseClusterWorker {
     this.ipc.register("reload", async (message) => {
       const path = paths.get(message);
       if (!path) return this.ipc.broadcast("reloadFail", { result: "I couldn't find that command!" });
-      const result = await load(this.bot, this.clusterID, this.workerID, this.ipc, path, await checkStatus(), true);
-      if (result !== message) return this.ipc.broadcast("reloadFail", { result });
-      return this.ipc.broadcast("reloadSuccess");
+      try {
+        const result = await load(this.bot, path, await checkStatus(), true);
+        if (result !== message) return this.ipc.broadcast("reloadFail", { result });
+        return this.ipc.broadcast("reloadSuccess");
+      } catch (result) {
+        return this.ipc.broadcast("reloadFail", { result });
+      }
     });
-
-    this.bot.privateChannels.limit = 0;
 
     this.ipc.register("soundreload", async () => {
       const soundStatus = await checkStatus();
@@ -95,7 +117,7 @@ class Shard extends BaseClusterWorker {
 
     this.ipc.register("playbroadcast", (message) => {
       this.bot.editStatus("dnd", {
-        name: `${message} | @${this.bot.user.username} help`,
+        name: message + this.playingSuffix,
       });
       broadcast = true;
       return this.ipc.broadcast("broadcastSuccess");
@@ -103,7 +125,7 @@ class Shard extends BaseClusterWorker {
 
     this.ipc.register("broadcastend", () => {
       this.bot.editStatus("dnd", {
-        name: `${random(messages)} | @${this.bot.user.username} help`,
+        name: random(messages) + this.playingSuffix,
       });
       broadcast = false;
       return this.ipc.broadcast("broadcastEnd");
@@ -111,6 +133,14 @@ class Shard extends BaseClusterWorker {
 
     // connect to lavalink
     if (!status && !connected) connect(this.bot);
+
+    const broadcastMessage = await this.ipc.centralStore.get("broadcast");
+    if (broadcastMessage) {
+      broadcast = true;
+      this.bot.editStatus("dnd", {
+        name: broadcastMessage + this.playingSuffix,
+      });
+    }
 
     this.activityChanger();
 
@@ -121,7 +151,7 @@ class Shard extends BaseClusterWorker {
   activityChanger() {
     if (!broadcast) {
       this.bot.editStatus("dnd", {
-        name: `${random(messages)} | @${this.bot.user.username} help`,
+        name: random(messages) + this.playingSuffix,
       });
     }
     setTimeout(this.activityChanger.bind(this), 900000);

@@ -7,7 +7,10 @@ import Command from "../../classes/command.js";
 class ExecCommand extends Command {
   async run() {
     const owners = process.env.OWNER.split(",");
-    if (!owners.includes(this.author.id)) return "Only the bot owner can use exec!";
+    if (!owners.includes(this.author.id)) {
+      this.success = false;
+      return "Only the bot owner can use exec!";
+    }
     await this.acknowledge();
     const code = this.options.cmd ?? this.args.join(" ");
     try {
@@ -39,6 +42,7 @@ class ExecCommand extends Command {
   static description = "Executes a shell command";
   static aliases = ["runcmd"];
   static arguments = ["[command]"];
+  static adminOnly = true;
 }
 
 export default ExecCommand;

@@ -3,6 +3,7 @@ import { request } from "undici";
 import fs from "fs";
 import format from "format-duration";
 import { Shoukaku, Connectors } from "shoukaku";
+import { setTimeout } from "timers/promises";
 
 export const players = new Map();
 export const queues = new Map();
@@ -22,7 +23,7 @@ export async function checkStatus() {
       const response = await request(`http://${node.url}/version`, { headers: { authorization: node.auth } }).then(res => res.body.text());
       if (response) newNodes.push(node);
     } catch {
-      logger.error(`Failed to get status of Lavalink node ${node.host}.`);
+      logger.error(`Failed to get status of Lavalink node ${node.url}.`);
     }
   }
   nodes = newNodes;
@@ -30,7 +31,7 @@ export async function checkStatus() {
   return status;
 }
 
-export async function connect(client) {
+export function connect(client) {
   manager = new Shoukaku(new Connectors.Eris(client), nodes, { moveOnDisconnect: true, resume: true, reconnectInterval: 500, reconnectTries: 1 });
   client.emit("ready"); // workaround
   manager.on("error", (node, error) => {
@@ -59,18 +60,18 @@ export function reload() {
 }
 
 export async function play(client, sound, options, music = false) {
-  if (!manager) return "The sound commands are still starting up!";
-  if (!options.channel.guild) return "This command only works in servers!";
-  if (!options.member.voiceState.channelID) return "You need to be in a voice channel first!";
-  if (!options.channel.guild.permissionsOf(client.user.id).has("voiceConnect")) return "I can't join this voice channel!";
+  if (!manager) return { content: "The sound commands are still starting up!", flags: 64 };
+  if (!options.channel.guild) return { content: "This command only works in servers!", flags: 64 };
+  if (!options.member.voiceState.channelID) return { content: "You need to be in a voice channel first!", flags: 64 };
+  if (!options.channel.guild.permissionsOf(client.user.id).has("voiceConnect")) return { content: "I can't join this voice channel!", flags: 64 };
   const voiceChannel = options.channel.guild.channels.get(options.member.voiceState.channelID);
-  if (!voiceChannel.permissionsOf(client.user.id).has("voiceConnect")) return "I don't have permission to join this voice channel!";
-  if (!music && manager.players.has(options.channel.guild.id)) return "I can't play a sound effect while other audio is playing!";
+  if (!voiceChannel.permissionsOf(client.user.id).has("voiceConnect")) return { content: "I don't have permission to join this voice channel!", flags: 64 };
+  if (!music && manager.players.has(options.channel.guild.id)) return { content: "I can't play a sound effect while other audio is playing!", flags: 64 };
   let node = manager.getNode();
   if (!node) {
     const status = await checkStatus();
     if (!status) {
-      await connect(client);
+      connect(client);
       node = manager.getNode();
     }
   }
@@ -80,14 +81,14 @@ export async function play(client, sound, options, music = false) {
   let response;
   try {
     response = await node.rest.resolve(sound);
-    if (!response) return "🔊 I couldn't get a response from the audio server.";
-    if (response.loadType === "NO_MATCHES" || response.loadType === "LOAD_FAILED") return "I couldn't find that song!";
+    if (!response) return { content: "🔊 I couldn't get a response from the audio server.", flags: 64 };
+    if (response.loadType === "NO_MATCHES" || response.loadType === "LOAD_FAILED") return { content: "I couldn't find that song!", flags: 64 };
   } catch (e) {
     logger.error(e);
-    return "🔊 Hmmm, seems that all of the audio servers are down. Try again in a bit.";
+    return { content: "🔊 Hmmm, seems that all of the audio servers are down. Try again in a bit.", flags: 64 };
   }
   const oldQueue = queues.get(voiceChannel.guild.id);
-  if (!response.tracks || response.tracks.length === 0) return "I couldn't find that song!";
+  if (!response.tracks || response.tracks.length === 0) return { content: "I couldn't find that song!", flags: 64 };
   if (music) {
     const sortedTracks = response.tracks.map((val) => { return val.track; });
     const playlistTracks = response.playlistInfo.selectedTrack ? sortedTracks : [sortedTracks[0]];
@@ -134,19 +135,19 @@ export async function nextSong(client, options, connection, track, info, music, 
             icon_url: client.user.avatarURL
           },
           fields: [{
-            name: "ℹ️ Title:",
+            name: "ℹ️ Title",
             value: info.title?.trim() !== "" ? info.title : "(blank)"
           },
           {
-            name: "🎤 Artist:",
+            name: "🎤 Artist",
             value: info.author?.trim() !== "" ? info.author : "(blank)"
           },
           {
-            name: "💬 Channel:",
+            name: "💬 Channel",
             value: voiceChannel.name
           },
           {
-            name: "🌐 Node:",
+            name: "🌐 Node",
             value: connection.node?.name ?? "Unknown"
           },
           {
@@ -168,6 +169,7 @@ export async function nextSong(client, options, connection, track, info, music, 
   connection.removeAllListeners("exception");
   connection.removeAllListeners("stuck");
   connection.removeAllListeners("end");
+  connection.setVolume(0.70);
   connection.playTrack({ track });
   players.set(voiceChannel.guild.id, { player: connection, type: music ? "music" : "sound", host: host, voiceChannel: voiceChannel, originalChannel: options.channel, loop, shuffle, playMessage: playingMessage });
   connection.once("exception", async (exception) => {
@@ -228,29 +230,27 @@ export async function nextSong(client, options, connection, track, info, music, 
       const newTrack = await connection.node.rest.decode(newQueue[0]);
       nextSong(client, options, connection, newQueue[0], newTrack, music, voiceChannel, host, player.loop, player.shuffle, track);
       try {
-        if (newQueue[0] !== track && playingMessage.channel.messages.has(playingMessage.id)) await playingMessage.delete();
-        if (newQueue[0] !== track && player.playMessage.channel.messages.has(player.playMessage.id)) await player.playMessage.delete();
+        if (options.type === "classic") {
+          if (newQueue[0] !== track && playingMessage.channel.messages.has(playingMessage.id)) await playingMessage.delete();
+          if (newQueue[0] !== track && player.playMessage.channel.messages.has(player.playMessage.id)) await player.playMessage.delete();
+        }
       } catch {
         // no-op
       }
     } else if (process.env.STAYVC !== "true") {
+      await setTimeout(400);
       connection.node.leaveChannel(voiceChannel.guild.id);
       players.delete(voiceChannel.guild.id);
       queues.delete(voiceChannel.guild.id);
       skipVotes.delete(voiceChannel.guild.id);
-      const content = "🔊 The current voice channel session has ended.";
+      const content = `🔊 The voice channel session in \`${voiceChannel.name}\` has ended.`;
       if (options.type === "classic") {
         await client.createMessage(options.channel.id, content);
       } else {
         await options.interaction.createMessage(content);
       }
-      try {
-        if (playingMessage.channel.messages.has(playingMessage.id)) await playingMessage.delete();
-        if (player?.playMessage.channel.messages.has(player.playMessage.id)) await player.playMessage.delete();
-      } catch {
-        // no-op
-      }
-    } else {
+    }
+    if (options.type === "classic") {
       try {
         if (playingMessage.channel.messages.has(playingMessage.id)) await playingMessage.delete();
         if (player?.playMessage.channel.messages.has(player.playMessage.id)) await player.playMessage.delete();

@@ -1,4 +1,5 @@
 class Command {
+  success = true;
   constructor(client, cluster, worker, ipc, options) {
     this.client = client;
     this.cluster = cluster;
@@ -65,6 +66,7 @@ class Command {
   static requires = [];
   static slashAllowed = true;
   static directAllowed = true;
+  static adminOnly = false;
 }
 
 export default Command;

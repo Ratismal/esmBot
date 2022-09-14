@@ -3,6 +3,7 @@ import MusicCommand from "../../classes/musicCommand.js";
 
 class NowPlayingCommand extends MusicCommand {
   async run() {
+    this.success = false;
     if (!this.channel.guild) return "This command only works in servers!";
     if (!this.member.voiceState.channelID) return "You need to be in a voice channel first!";
     if (!this.channel.guild.members.get(this.client.user.id).voiceState.channelID) return "I'm not in a voice channel!";
@@ -10,6 +11,7 @@ class NowPlayingCommand extends MusicCommand {
     if (!player) return "I'm not playing anything!";
     const track = await player.node.rest.decode(player.track);
     const parts = Math.floor((player.position / track.length) * 10);
+    this.success = true;
     return {
       embeds: [{
         color: 16711680,
@@ -18,19 +20,19 @@ class NowPlayingCommand extends MusicCommand {
           icon_url: this.client.user.avatarURL
         },
         fields: [{
-          name: "ℹ️ Title:",
+          name: "ℹ️ Title",
           value: track.title ? track.title : "Unknown"
         },
         {
-          name: "🎤 Artist:",
+          name: "🎤 Artist",
           value: track.author ? track.author : "Unknown"
         },
         {
-          name: "💬 Channel:",
+          name: "💬 Channel",
           value: this.channel.guild.channels.get(this.member.voiceState.channelID).name
         },
         {
-          name: "🌐 Node:",
+          name: "🌐 Node",
           value: player.node ? player.node.name : "Unknown"
         },
         {
@@ -42,7 +44,7 @@ class NowPlayingCommand extends MusicCommand {
   }
 
   static description = "Shows the currently playing song";
-  static aliases = ["playing", "np"];
+  static aliases = ["playing", "np", "current"];
 }
 
 export default NowPlayingCommand;

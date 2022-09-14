@@ -35,6 +35,8 @@ import database from "./utils/database.js";
 import { Api } from "@top-gg/sdk";
 const dbl = process.env.NODE_ENV === "production" && process.env.DBL ? new Api(process.env.DBL) : null;
 
+const { types } = JSON.parse(readFileSync(new URL("./config/commands.json", import.meta.url)));
+
 if (isMaster) {
   const esmBotVersion = JSON.parse(readFileSync(new URL("./package.json", import.meta.url))).version;
   const erisFleetVersion = JSON.parse(readFileSync(new URL("./node_modules/eris-fleet/package.json", import.meta.url))).version; // a bit of a hacky way to get the eris-fleet version
@@ -63,6 +65,21 @@ esmBot ${esmBotVersion} (${(await exec("git rev-parse HEAD").then(output => outp
 `);
 }
 
+const services = [
+  { name: "image", ServiceWorker: ImageWorker }
+];
+if (process.env.METRICS && process.env.METRICS !== "") services.push({ name: "prometheus", ServiceWorker: PrometheusWorker });
+
+const intents = [
+  "guildVoiceStates",
+  "directMessages"
+];
+if (types.classic) {
+  intents.push("guilds");
+  intents.push("guildMessages");
+  intents.push("messageContent");
+}
+
 const Admiral = new Fleet({
   BotWorker: Shard,
   token: `Bot ${process.env.TOKEN}`,
@@ -86,22 +103,14 @@ const Admiral = new Fleet({
     },
     restMode: true,
     messageLimit: 50,
-    intents: [
-      "guilds",
-      "guildVoiceStates",
-      "guildMessages",
-      "directMessages"
-    ],
+    intents,
     stats: {
       requestTimeout: 30000
     },
     connectionTimeout: 30000
   },
   useCentralRequestHandler: process.env.DEBUG_LOG ? false : true, // workaround for eris-fleet weirdness
-  services: [
-    { name: "prometheus", ServiceWorker: PrometheusWorker },
-    { name: "image", ServiceWorker: ImageWorker }
-  ]
+  services
 });
 
 if (isMaster) {

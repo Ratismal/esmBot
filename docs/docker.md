@@ -8,15 +8,15 @@ cd ~
 git clone --recurse-submodules https://github.com/esmBot/esmBot
 cd esmBot
 ```
-Modify the `.env` file as described in step 5 of the manual setup. Make sure to change the `DB` option to this, however:
+Modify the `.env` file as described in step 7 of the manual setup. Make sure to change the `DB` option to this, however:
 ```
 DB=postgresql://esmbot:verycoolpass100@postgres:5432/esmbot
 ```
-You should then modify the `servers.json` file to change the IP addresses of the servers to match the Docker containers. Example:
+You should then modify the `config/servers.json` file to change the IP addresses of the servers to match the Docker containers. Example:
 ```json
 {
   "lava": [
-    { "name": "localhost", "url": "localhost:2333", "auth": "youshallnotpass", "local": true }
+    { "name": "localhost", "url": "lavalink:2333", "auth": "youshallnotpass", "local": true }
   ],
   "image": [
     { "server": "api", "auth": "verycoolpass100", "tls": false }

@@ -13,9 +13,7 @@ const optionalReplace = (token) => {
 };
 
 // clean(text) to clean message of any private info or mentions
-export async function clean(text) {
-  if (text?.constructor?.name == "Promise")
-    text = await text;
+export function clean(text) {
   if (typeof text !== "string")
     text = util.inspect(text, { depth: 1 });
 
@@ -40,25 +38,7 @@ export async function clean(text) {
   return text;
 }
 
-// regexEscape(string) to escape characters in a string for use in a regex
-export function regexEscape(string) {
-  return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); // $& means the whole matched string
-}
-
-// decodeEntities(string)
-export function decodeEntities(string) {
-  var translate_re = /&(nbsp|amp|quot|lt|gt);/g;
-  var translate = {
-    "nbsp": " ",
-    "amp": "&",
-    "quot": "\"",
-    "lt": "<",
-    "gt": ">"
-  };
-  return string.replace(translate_re, function(match, entity) {
-    return translate[entity];
-  }).replace(/&#(\d+);/gi, function(match, numStr) {
-    var num = parseInt(numStr, 10);
-    return String.fromCharCode(num);
-  });
+// textEncode(string) to encode characters for image processing
+export function textEncode(string) {
+  return string.replaceAll("&", "&amp;").replaceAll(">", "&gt;").replaceAll("<", "&lt;").replaceAll("\"", "&quot;").replaceAll("'", "&apos;").replaceAll("\\n", "\n").replaceAll("\\:", ":");
 }

@@ -37,7 +37,7 @@ Choose the distro you're using below for insallation instructions.
     ```sh
     sudo pacman -S git curl cmake pango ffmpeg npm imagemagick libvips sqlite3 libltdl noto-fonts-emoji gobject-introspection libcgif libimagequant meson
     ```
-    You'll also need to install [`ttf-ms-fonts`](https://aur.archlinux.org/packages/ttf-ms-fonts/) from the AUR.
+    You'll also need to install [`ttf-ms-win10-auto`](https://aur.archlinux.org/packages/ttf-ms-win10-auto/) from the AUR.
 
 ***
 
@@ -46,7 +46,7 @@ Choose the distro you're using below for insallation instructions.
 [libvips](https://github.com/libvips/libvips) is the core of esmBot's image processing commands. The latest version (8.13.0) is recommended because it contains fixes to GIF handling and support for the freeze command; however, this version isn't packaged for most distros yet. To fix this, you'll need to build libvips from source.
 
 !!! note
-    Alpine and Arch users can skip this step, since both distros now have 8.13.0 packaged.
+    Alpine, Arch, and RHEL **(not Fedora!)** users can skip this step, since these distros now have 8.13.0 packaged.
 
 First, download the source and move into it:
 ```sh
@@ -142,7 +142,7 @@ Initial setup is like this:
 cd ~
 mkdir Lavalink
 cd Lavalink
-wget https://github.com/Cog-Creators/Lavalink-Jars/releases/latest/download/Lavalink.jar
+curl -OL https://github.com/Cog-Creators/Lavalink-Jars/releases/latest/download/Lavalink.jar
 cp ~/esmBot/application.yml .
 ln -s ~/esmBot/assets assets
 ```

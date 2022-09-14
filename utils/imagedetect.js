@@ -52,7 +52,14 @@ const getImage = async (image, image2, video, extraReturnTypes, gifv = false, ty
         // Tenor doesn't let us access a raw GIF without going through their API,
         // so we use that if there's a key in the config
         if (process.env.TENOR !== "") {
-          const data = await request(`https://tenor.googleapis.com/v2/posts?ids=${image2.split("-").pop()}&media_filter=gif&limit=1&key=${process.env.TENOR}`);
+          let id;
+          if (image2.includes("tenor.com/view/")) {
+            id = image2.split("-").pop();
+          } else if (image2.endsWith(".gif")) {
+            const redirect = (await request(image2, { method: "HEAD" })).headers.location;
+            id = redirect.split("-").pop();
+          }
+          const data = await request(`https://tenor.googleapis.com/v2/posts?ids=${id}&media_filter=gif&limit=1&key=${process.env.TENOR}`);
           if (data.statusCode === 429) {
             if (extraReturnTypes) {
               payload.type = "tenorlimit";
@@ -75,7 +82,14 @@ const getImage = async (image, image2, video, extraReturnTypes, gifv = false, ty
         payload.path = image.replace(".mp4", ".gif");
       } else if (gfycatURLs.includes(host)) {
         // iirc Gfycat also seems to sometimes make GIFs static
-        payload.path = `https://thumbs.gfycat.com/${image.split("/").pop().split(".mp4")[0]}-size_restricted.gif`;
+        if (link) {
+          const data = await request(`https://api.gfycat.com/v1/gfycats/${image.split("/").pop().split(".mp4")[0]}`);
+          const json = await data.body.json();
+          if (json.errorMessage) throw Error(json.errorMessage);
+          payload.path = json.gfyItem.gifUrl;
+        } else {
+          payload.path = `https://thumbs.gfycat.com/${image.split("/").pop().split(".mp4")[0]}-size_restricted.gif`;
+        }
       }
       payload.type = "image/gif";
     } else if (video) {
@@ -126,7 +140,7 @@ const checkImages = async (message, extraReturnTypes, video, sticker) => {
 };
 
 // this checks for the latest message containing an image and returns the url of the image
-export default async (client, cmdMessage, interaction, options, extraReturnTypes = false, video = false, sticker = false) => {
+export default async (client, cmdMessage, interaction, options, extraReturnTypes = false, video = false, sticker = false, singleMessage = false) => {
   // we start by determining whether or not we're dealing with an interaction or a message
   if (interaction) {
     // we can get a raw attachment or a URL in the interaction itself
@@ -140,7 +154,8 @@ export default async (client, cmdMessage, interaction, options, extraReturnTypes
         if (result !== false) return result;
       }
     }
-  } else {
+  }
+  if (cmdMessage) {
     // check if the message is a reply to another message
     if (cmdMessage.messageReference) {
       const replyMessage = await client.getMessage(cmdMessage.messageReference.channelID, cmdMessage.messageReference.messageID).catch(() => undefined);
@@ -153,15 +168,21 @@ export default async (client, cmdMessage, interaction, options, extraReturnTypes
     const result = await checkImages(cmdMessage, extraReturnTypes, video, sticker);
     if (result !== false) return result;
   }
-  // if there aren't any replies or interaction attachments then iterate over the last few messages in the channel
-  const messages = await client.getMessages((interaction ? interaction : cmdMessage).channel.id);
-  // iterate over each message
-  for (const message of messages) {
-    const result = await checkImages(message, extraReturnTypes, video, sticker);
-    if (result === false) {
-      continue;
-    } else {
-      return result;
+  if (!singleMessage) {
+    // if there aren't any replies or interaction attachments then iterate over the last few messages in the channel
+    try {
+      const messages = await client.getMessages((interaction ? interaction : cmdMessage).channel.id);
+      // iterate over each message
+      for (const message of messages) {
+        const result = await checkImages(message, extraReturnTypes, video, sticker);
+        if (result === false) {
+          continue;
+        } else {
+          return result;
+        }
+      } 
+    } catch {
+      // no-op
     }
   }
 };
