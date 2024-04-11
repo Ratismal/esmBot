@@ -1,6 +1,9 @@
-#include <napi.h>
-
+#include <iostream>
+#include <map>
+#include <cinttypes>
 #include <vips/vips8>
+
+#include "common.h"
 
 using namespace std;
 using namespace vips;
@@ -12,12 +15,10 @@ void *memset16(void *m, uint16_t val, size_t count) {
   return m;
 }
 
-void vipsRemove(Napi::Env *env, Napi::Object *result, Napi::Buffer<char> data,
-                int speed) {
+char *vipsRemove(const char *data, size_t length, size_t& dataSize, int speed) {
   VOption *options = VImage::option()->set("access", "sequential");
 
-  VImage in = VImage::new_from_buffer(data.Data(), data.Length(), "",
-                                      options->set("n", -1))
+  VImage in = VImage::new_from_buffer(data, length, "", options->set("n", -1))
                   .colourspace(VIPS_INTERPRETATION_sRGB);
   if (!in.has_alpha()) in = in.bandjoin(255);
 
@@ -33,83 +34,73 @@ void vipsRemove(Napi::Env *env, Napi::Object *result, Napi::Buffer<char> data,
   VImage out = VImage::arrayjoin(img, VImage::option()->set("across", 1));
   out.set(VIPS_META_PAGE_HEIGHT, pageHeight);
 
-  void *buf;
-  size_t length;
-  out.write_to_buffer(".gif", &buf, &length);
+  char *buf;
+  out.write_to_buffer(".gif", reinterpret_cast<void**>(&buf), &dataSize);
 
-  result->Set("data", Napi::Buffer<char>::Copy(*env, (char *)buf, length));
+  return buf;
 }
 
-Napi::Value Speed(const Napi::CallbackInfo &info) {
-  Napi::Env env = info.Env();
-  Napi::Object result = Napi::Object::New(env);
+ArgumentMap Speed([[maybe_unused]] const string& type, [[maybe_unused]] string& outType, const char* bufferdata, size_t bufferLength, ArgumentMap arguments, size_t& dataSize)
+{
+  bool slow = GetArgumentWithFallback<bool>(arguments, "slow", false);
+  int speed = GetArgumentWithFallback<int>(arguments, "speed", 2);
 
-  try {
-    Napi::Object obj = info[0].As<Napi::Object>();
-    Napi::Buffer<char> data = obj.Get("data").As<Napi::Buffer<char>>();
-    bool slow =
-        obj.Has("slow") ? obj.Get("slow").As<Napi::Boolean>().Value() : false;
-    string type = obj.Get("type").As<Napi::String>().Utf8Value();
-    int speed =
-        obj.Has("speed") ? obj.Get("speed").As<Napi::Number>().Int32Value() : 2;
+  char *fileData = reinterpret_cast<char*>(malloc(bufferLength));
+  memcpy(fileData, bufferdata, bufferLength);
 
-    char *fileData = data.Data();
+  char *match = const_cast<char*>("\x00\x21\xF9\x04");
 
-    char *match = (char *)"\x00\x21\xF9\x04";
+  vector<uint16_t> old_delays;
+  bool removeFrames = false;
+  char *lastPos;
 
-    vector<uint16_t> old_delays;
-    bool removeFrames = false;
-    char *lastPos;
+  // int amount = 0;
 
-    int amount = 0;
-
-    lastPos = (char *)memchr(fileData, '\x00', data.Length());
-    while (lastPos != NULL) {
-      if (memcmp(lastPos, match, 4) != 0) {
-        lastPos = (char *)memchr(lastPos + 1, '\x00',
-                                 (data.Length() - (lastPos - fileData)) - 1);
-        continue;
-      }
-      ++amount;
-      uint16_t old_delay;
-      memcpy(&old_delay, lastPos + 5, 2);
-      old_delays.push_back(old_delay);
-      lastPos = (char *)memchr(lastPos + 1, '\x00',
-                               (data.Length() - (lastPos - fileData)) - 1);
+  lastPos = reinterpret_cast<char*>(memchr(fileData, '\x00', bufferLength));
+  while (lastPos != NULL) {
+    if (memcmp(lastPos, match, 4) != 0) {
+      lastPos = reinterpret_cast<char*>(memchr(lastPos + 1, '\x00',
+                               (bufferLength - (lastPos - fileData)) - 1));
+      continue;
     }
-
-    int currentFrame = 0;
-    lastPos = (char *)memchr(fileData, '\x00', data.Length());
-    while (lastPos != NULL) {
-      if (memcmp(lastPos, match, 4) != 0) {
-        lastPos = (char *)memchr(lastPos + 1, '\x00',
-                                 (data.Length() - (lastPos - fileData)) - 1);
-        continue;
-      }
-      uint16_t new_delay = slow ? old_delays[currentFrame] * speed
-                                : old_delays[currentFrame] / speed;
-      if (!slow && new_delay <= 1) {
-        removeFrames = true;
-        break;
-      }
-      memset16(lastPos + 5, new_delay, 1);
-      lastPos = (char *)memchr(lastPos + 1, '\x00',
-                               (data.Length() - (lastPos - fileData)) - 1);
-      ++currentFrame;
-    }
-
-    result.Set("data", Napi::Buffer<char>::Copy(env, fileData, data.Length()));
-
-    if (removeFrames) vipsRemove(&env, &result, data, speed);
-
-    result.Set("type", type);
-  } catch (std::exception const &err) {
-    Napi::Error::New(env, err.what()).ThrowAsJavaScriptException();
-  } catch (...) {
-    Napi::Error::New(env, "Unknown error").ThrowAsJavaScriptException();
+    //++amount;
+    uint16_t old_delay;
+    memcpy(&old_delay, lastPos + 5, 2);
+    old_delays.push_back(old_delay);
+    lastPos = reinterpret_cast<char*>(memchr(lastPos + 1, '\x00',
+                             (bufferLength - (lastPos - fileData)) - 1));
   }
 
-  vips_error_clear();
-  vips_thread_shutdown();
-  return result;
+  int currentFrame = 0;
+  lastPos = reinterpret_cast<char*>(memchr(fileData, '\x00', bufferLength));
+  while (lastPos != NULL) {
+    if (memcmp(lastPos, match, 4) != 0) {
+      lastPos = reinterpret_cast<char*>(memchr(lastPos + 1, '\x00',
+                               (bufferLength - (lastPos - fileData)) - 1));
+      continue;
+    }
+    uint16_t new_delay = slow ? old_delays[currentFrame] * speed
+                              : old_delays[currentFrame] / speed;
+    if (!slow && new_delay <= 1) {
+      removeFrames = true;
+      break;
+    }
+
+    memset16(lastPos + 5, new_delay, 1);
+
+    lastPos = reinterpret_cast<char*>(memchr(lastPos + 1, '\x00',
+                             (bufferLength - (lastPos - fileData)) - 1));
+    ++currentFrame;
+  }
+
+  if (removeFrames) {
+    fileData = vipsRemove(bufferdata, bufferLength, dataSize, speed);
+  } else {
+    dataSize = bufferLength;
+  }
+
+  ArgumentMap output;
+  output["buf"] = fileData;
+
+  return output;
 }

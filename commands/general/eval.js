@@ -12,21 +12,23 @@ class EvalCommand extends Command {
     const code = this.options.code ?? this.args.join(" ");
     try {
       let evaled = eval(code);
-      if (evaled?.constructor?.name == "Promise") evaled = await evaled;
+      if (evaled?.constructor?.name === "Promise") evaled = await evaled;
       const cleaned = clean(evaled);
       const sendString = `\`\`\`js\n${cleaned}\n\`\`\``;
       if (sendString.length >= 2000) {
         return {
-          text: "The result was too large, so here it is as a file:",
-          file: cleaned,
-          name: "result.txt"
+          content: "The result was too large, so here it is as a file:",
+          files: [{
+            contents: cleaned,
+            name: "result.txt"
+          }]
         };
       } else {
         return sendString;
       }
     } catch (err) {
       let error = err;
-      if (err?.constructor?.name == "Promise") error = await err;
+      if (err?.constructor?.name === "Promise") error = await err;
       return `\`ERROR\` \`\`\`xl\n${clean(error)}\n\`\`\``;
     }
   }
@@ -40,7 +42,7 @@ class EvalCommand extends Command {
 
   static description = "Executes JavaScript code";
   static aliases = ["run"];
-  static arguments = ["[code]"];
+  static args = ["[code]"];
   static adminOnly = true;
 }
 

@@ -1,49 +1,38 @@
-#include <napi.h>
-
 #include <vips/vips8>
+
+#include "common.h"
 
 using namespace std;
 using namespace vips;
 
-Napi::Value Homebrew(const Napi::CallbackInfo &info) {
-  Napi::Env env = info.Env();
-  Napi::Object result = Napi::Object::New(env);
+ArgumentMap Homebrew([[maybe_unused]] const string& type, string& outType, ArgumentMap arguments, size_t& dataSize)
+{
+  string caption = GetArgument<string>(arguments, "caption");
+  string basePath = GetArgument<string>(arguments, "basePath");
 
-  try {
-    Napi::Object obj = info[0].As<Napi::Object>();
-    string caption = obj.Get("caption").As<Napi::String>().Utf8Value();
-    string basePath = obj.Get("basePath").As<Napi::String>().Utf8Value();
+  string assetPath = basePath + "assets/images/hbc.png";
+  VImage bg = VImage::new_from_file(assetPath.c_str());
 
-    string assetPath = basePath + "assets/images/hbc.png";
-    VImage bg = VImage::new_from_file(assetPath.c_str());
+  LoadFonts(basePath);
+  VImage text = VImage::text(
+      ("<span letter_spacing=\"-5120\" color=\"white\">" + caption + "</span>")
+          .c_str(),
+      VImage::option()
+          ->set("rgba", true)
+          ->set("align", VIPS_ALIGN_CENTRE)
+          ->set("font", "PF Square Sans Pro 96")
+          ->set("fontfile", (basePath + "assets/fonts/hbc.ttf").c_str()));
 
-    VImage text =
-        VImage::text(("<span letter_spacing=\"-5120\" color=\"white\">" +
-                      caption + "</span>")
-                         .c_str(),
-                     VImage::option()
-                         ->set("rgba", true)
-                         ->set("align", VIPS_ALIGN_CENTRE)
-                         ->set("font", "PF Square Sans Pro 96"));
+  VImage out = bg.composite2(text, VIPS_BLEND_MODE_OVER,
+                             VImage::option()
+                                 ->set("x", 400 - (text.width() / 2))
+                                 ->set("y", 300 - (text.height() / 2) - 8));
 
-    VImage out = bg.composite2(text, VIPS_BLEND_MODE_OVER,
-                               VImage::option()
-                                   ->set("x", 400 - (text.width() / 2))
-                                   ->set("y", 300 - (text.height() / 2) - 8));
+  char *buf;
+  out.write_to_buffer(("." + outType).c_str(), reinterpret_cast<void**>(&buf), &dataSize);
 
-    void *buf;
-    size_t length;
-    out.write_to_buffer(".png", &buf, &length);
+  ArgumentMap output;
+  output["buf"] = buf;
 
-    result.Set("data", Napi::Buffer<char>::Copy(env, (char *)buf, length));
-    result.Set("type", "png");
-  } catch (std::exception const &err) {
-    Napi::Error::New(env, err.what()).ThrowAsJavaScriptException();
-  } catch (...) {
-    Napi::Error::New(env, "Unknown error").ThrowAsJavaScriptException();
-  }
-
-  vips_error_clear();
-  vips_thread_shutdown();
-  return result;
+  return output;
 }

@@ -1,3 +1,4 @@
+import { Constants } from "oceanic.js";
 import ImageCommand from "../../classes/imageCommand.js";
 
 class FreezeCommand extends ImageCommand {
@@ -5,7 +6,7 @@ class FreezeCommand extends ImageCommand {
     const frameCount = parseInt(this.options.endframe ?? this.args[0]);
     return {
       loop: false,
-      frame: isNaN(frameCount) ? -1 : frameCount
+      frame: Number.isNaN(frameCount) ? -1 : frameCount
     };
   }
 
@@ -13,7 +14,7 @@ class FreezeCommand extends ImageCommand {
     super.init();
     this.flags.push({
       name: "endframe",
-      type: 4,
+      type: Constants.ApplicationCommandOptionTypes.INTEGER,
       description: "Set the end frame (default: last frame)",
       min_value: 0
     });
@@ -22,7 +23,7 @@ class FreezeCommand extends ImageCommand {
 
   static description = "Makes an image sequence only play once";
   static aliases = ["noloop", "once"];
-  static arguments = ["{end frame number}"];
+  static args = ["{end frame number}"];
 
   static requiresGIF = true;
   static noImage = "You need to provide an image/GIF to freeze!";

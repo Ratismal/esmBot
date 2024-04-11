@@ -1,40 +1,21 @@
-import qrcode from "qrcode";
-import { PassThrough } from "stream";
-import Command from "../../classes/command.js";
+import ImageCommand from "../../classes/imageCommand.js";
+import { cleanMessage } from "../../utils/misc.js";
 
-class QrCreateCommand extends Command {
-  async run() {
-    if (this.args.length === 0) {
-      this.success = false;
-      return "You need to provide some text to generate a QR code!";
-    }
-    await this.acknowledge();
-    const writable = new PassThrough();
-    qrcode.toFileStream(writable, this.content, { margin: 1 });
-    const file = await this.streamToBuf(writable);
+class QrCreateCommand extends ImageCommand {
+  params() {
+    const cleanedMessage = cleanMessage(this.message ?? this.interaction, this.options.text ?? this.args.join(" "));
     return {
-      file: file,
-      name: "qr.png"
+      text: cleanedMessage
     };
   }
 
-  streamToBuf(stream) {
-    return new Promise((resolve, reject) => {
-      const chunks = [];
-      stream.on("data", (chunk) => {
-        chunks.push(chunk);
-      });
-      stream.once("error", (error) => {
-        reject(error);
-      });
-      stream.once("end", () => {
-        resolve(Buffer.concat(chunks));
-      });
-    });
-  }
-
   static description = "Generates a QR code";
-  static arguments = ["[text]"];
+  static args = ["[text]"];
+
+  static requiresImage = false;
+  static requiresText = true;
+  static noText = "You need to provide some text to generate a QR code!";
+  static command = "qrcreate";
 }
 
 export default QrCreateCommand;

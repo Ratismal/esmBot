@@ -4,20 +4,23 @@ Here are some instructions to get esmBot up and running from source.
 ??? check "Recommended system requirements"
     - 64-bit CPU/operating system
     - Quad-core CPU or better
-    - 1GB or more of RAM
-    - Linux-based operating system or virtual machine ([Ubuntu 22.04 LTS](https://ubuntu.com/download/server) or [Fedora 36](https://getfedora.org/) are recommended)
+    - 512MB or more of RAM
+    - Linux-based operating system or virtual machine ([Ubuntu](https://ubuntu.com/download/server) or [Fedora](https://getfedora.org/) are recommended)
 
 !!! warning
-    If you want to run the bot on Windows, [Windows Subsystem for Linux](https://docs.microsoft.com/en-us/windows/wsl/install-win10) is recommended. This guide is somewhat Linux-centric, so for now you're mostly on your own if you decide not to use WSL.
+    If you want to run the bot on Windows, [Windows Subsystem for Linux](https://learn.microsoft.com/en-us/windows/wsl/install) is recommended. This guide is somewhat Linux-centric, so for now you're mostly on your own if you decide not to use WSL.
 
-If you have any further questions regarding setup, feel free to ask in the #self-hosting-support channel on the [esmBot Support server](https://projectlounge.pw/support).
+If you have any further questions regarding setup, feel free to ask in the #support channel on the [esmBot Support server](https://esmbot.net/support).
+
+!!! tip
+    You can run the bot using Docker for a somewhat simpler setup experience. [Click here to go to the Docker setup guide.](https://docs.esmbot.net/docker)
 
 ### 1. Install the required native dependencies.
 Choose the distro you're using below for insallation instructions.
 === "Debian/Ubuntu"
     These instructions apply to Debian version 12 (bookworm) or Ubuntu version 22.04 (jammy) or later.
     ```sh
-    sudo apt-get install git curl build-essential cmake ffmpeg sqlite3 ttf-mscorefonts-installer libmagick++-dev libvips-dev libcgif-dev libgirepository1.0-dev fonts-noto-color-emoji libimagequant-dev meson
+    sudo apt-get install git curl build-essential cmake ffmpeg sqlite3 ttf-mscorefonts-installer libmagick++-dev libvips-dev libcgif-dev libgirepository1.0-dev libimagequant-dev meson libzxingcore-dev
     ```
     On older Debian/Ubuntu versions, you may need to install some of these packages (notably libcgif-dev and meson) through alternative methods.
 === "Fedora/RHEL"
@@ -25,17 +28,22 @@ Choose the distro you're using below for insallation instructions.
 
     Some of these packages require that you add the RPM Fusion and/or EPEL repositories. You can find instructions on how to add them [here](https://rpmfusion.org/Configuration).
     ```sh
-    sudo dnf install git curl cmake ffmpeg sqlite gcc-c++ libcgif-devel ImageMagick-c++-devel vips-devel libimagequant-devel gobject-introspection-devel google-noto-emoji-color-fonts meson
+    sudo dnf install git curl cmake ffmpeg sqlite gcc-c++ libcgif-devel ImageMagick-c++-devel vips-devel libimagequant-devel gobject-introspection-devel meson cabextract zxing-cpp-devel
     ```
     On RHEL-based distros like AlmaLinux and Rocky Linux, you may need to add [Remi's RPM Repository](https://rpms.remirepo.net) for the vips package.
-=== "Alpine"
-    These instructions apply to the current Edge versions.
+    
+    Some fonts used in the bot (e.g. Impact) require installing the MS Core Fonts package, which is unavailable through most RHEL repositories. You can install it using the following command (you're on your own regarding dependencies, each RHEL derivative handles them differently):
     ```sh
-    doas apk add git curl msttcorefonts-installer python3 sqlite3 alpine-sdk cmake ffmpeg imagemagick-dev vips-dev font-noto-emoji gobject-introspection-dev cgif-dev libimagequant-dev meson
+    sudo rpm -i https://downloads.sourceforge.net/project/mscorefonts2/rpms/msttcore-fonts-installer-2.6-1.noarch.rpm
+    ```
+=== "Alpine"
+    These instructions should apply to the current Edge versions.
+    ```sh
+    sudo apk add git curl msttcorefonts-installer python3 sqlite3 alpine-sdk cmake ffmpeg imagemagick-dev vips-dev gobject-introspection-dev cgif-dev libimagequant-dev meson zxing-cpp-dev
     ```
 === "Arch/Manjaro"
     ```sh
-    sudo pacman -S git curl cmake pango ffmpeg npm imagemagick libvips sqlite3 libltdl noto-fonts-emoji gobject-introspection libcgif libimagequant meson
+    sudo pacman -S git curl cmake pango ffmpeg npm imagemagick libvips sqlite3 libltdl gobject-introspection libcgif libimagequant meson zxing-cpp
     ```
     You'll also need to install [`ttf-ms-win10-auto`](https://aur.archlinux.org/packages/ttf-ms-win10-auto/) from the AUR.
 
@@ -43,10 +51,7 @@ Choose the distro you're using below for insallation instructions.
 
 ### 2. Install libvips.
 
-[libvips](https://github.com/libvips/libvips) is the core of esmBot's image processing commands. The latest version (8.13.0) is recommended because it contains fixes to GIF handling and support for the freeze command; however, this version isn't packaged for most distros yet. To fix this, you'll need to build libvips from source.
-
-!!! note
-    Alpine, Arch, and RHEL **(not Fedora!)** users can skip this step, since these distros now have 8.13.0 packaged.
+[libvips](https://github.com/libvips/libvips) is the core of esmBot's image processing commands. Version 8.13.0 or higher is required and should be packaged for most distros; however, you may want to build from source to take advantage of the `nsgif` GIF decoder and its improved performance over the default ImageMagick decoder.
 
 First, download the source and move into it:
 ```sh
@@ -68,36 +73,24 @@ sudo meson install
 
 ### 3. Install Node.js.
 
-Node.js is the runtime that esmBot is built on top of. The bot requires version 15 or above to run.
+Node.js is the runtime that esmBot is built on top of. The bot requires version 18 or above to run, but version 20 is recommended.
 
-First things first, we'll need to install pnpm, the package manager used by the bot. Run the following to install it:
+We suggest using nvm to manage your Node.js install. Run the following command to install it:
 ```sh
-curl -fsSL https://get.pnpm.io/install.sh | sh -
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
 ```
 
-Once you've done that, continue with the instructions for your operating system below.
+Then run the following to install Node.js:
+```sh
+nvm install 20
+nvm use 20
+```
 
-=== "Debian/Ubuntu"
-    You'll need a more recent version than what's provided in most Debian/Ubuntu-based distros. You can add a repository that contains a supported version by running this command:
-    ```sh
-    curl -fsSL https://deb.nodesource.com/setup_16.x | sudo bash -
-    ```
-    After that, you can install Node.js with this command:
-    ```sh
-    sudo apt-get install nodejs
-    ```
-=== "Fedora/RHEL"
-    ```sh
-    sudo dnf install nodejs
-    ```
-=== "Alpine"
-    ```sh
-    doas apk add nodejs
-    ```
-=== "Arch/Manjaro"
-    ```sh
-    sudo pacman -S nodejs
-    ```
+esmBot uses the pnpm package manager to manage dependencies and run build scripts. You can use Corepack (a tool included with Node.js) to install it:
+```sh
+corepack enable
+corepack prepare pnpm@latest --activate
+```
 
 ***
 
@@ -105,36 +98,37 @@ Once you've done that, continue with the instructions for your operating system 
 
 esmBot officially supports two database systems: SQLite and PostgreSQL. While SQLite is smaller and requires no initial setup, PostgreSQL has better performance (especially in large environments).
 
+!!! tip
+    If you're new to databases and self-hosting, choose SQLite.
+
 If you would like to use the SQLite database, no configuration is needed and you can move on to the next step.
 
-If you would like to use the PostgreSQL database, view the setup instructions [here](https://github.com/esmBot/esmBot/wiki/PostgreSQL) and come back here when you're finished.
+If you would like to use the PostgreSQL database, view the setup instructions [here](https://docs.esmbot.net/postgresql) and come back here when you're finished.
 
 ***
 
 ### 5. Clone the repo and install the required Node modules.
 ```sh
 cd ~
-git clone --recurse-submodules https://github.com/esmBot/esmBot
+git clone --recursive https://github.com/esmBot/esmBot
 cd esmBot
 pnpm i -g node-gyp
 pnpm install
 pnpm build
-```
-You'll also need to copy over some fonts for the image commands:
-```sh
-sudo cp assets/*.ttf assets/*.otf /usr/local/share/fonts
-fc-cache -fv
 ```
 
 ***
 
 ### 6. (Optional) Set up Lavalink.
 
-Lavalink is the audio server used by esmBot for soundboard commands and music playback. If you do not plan on using these features, you can safely skip this step.
+Lavalink is the audio server used by esmBot for music playback. If you do not plan on using this feature, you can safely skip this step.
 
-Lavalink requires a Java (11 or 13) installation. You can use [SDKMAN](https://sdkman.io) to install Eclipse Temurin, a popular Java distribution:
+!!! warning
+    There are websites out there providing lists of public Lavalink instances that can be used with the bot. However, these are not recommended due to performance/security concerns and missing features, and it is highly recommended to set one up yourself instead using the steps below.
+
+esmBot requires Lavalink version v4 or later, which requires a Java (17 or later) installation. You can use [SDKMAN](https://sdkman.io) to install Eclipse Temurin, a popular Java distribution:
 ```sh
-sdk install java 11.0.15-tem
+sdk install java 17.0.9-tem
 ```
 
 Initial setup is like this:
@@ -142,14 +136,17 @@ Initial setup is like this:
 cd ~
 mkdir Lavalink
 cd Lavalink
-curl -OL https://github.com/Cog-Creators/Lavalink-Jars/releases/latest/download/Lavalink.jar
+curl -OL https://github.com/lavalink-devs/Lavalink/releases/latest/download/Lavalink.jar
 cp ~/esmBot/application.yml .
 ln -s ~/esmBot/assets assets
 ```
 To run Lavalink, you can use this command:
 ```sh
-java -Djdk.tls.client.protocols=TLSv1.2 -jar Lavalink.jar
+java -jar Lavalink.jar
 ```
+
+!!! info
+    You'll need to run Lavalink alongside the bot in order to use it. There are a few methods to do this, such as the `screen` command, creating a new systemd service, or simply just opening a new terminal session alongside your current one.
 
 ***
 
@@ -171,7 +168,7 @@ This will launch a text editor with the file ready to go. Create a Discord appli
 
 When you're finished editing the file, press Ctrl + X, then Y and Enter.
 
-An overview of each of the variables in the `.env` file can be found [here](https://github.com/esmBot/esmBot/wiki/Config).
+An overview of each of the variables in the `.env` file can be found [here](https://docs.esmbot.net/config).
 
 ***
 
@@ -199,11 +196,16 @@ pnpm add -g pm2
 
 Once you've done that, you can start the bot using the following command:
 ```sh
-pm2 start app.js
+pm2 start ecosystem.config.cjs
 ```
 
 !!! tip
-    If you wish to update the bot to the latest version/commit at any time, just run `git pull` and `pnpm install`.
+    If you wish to update the bot to the latest version/commit at any time, run the following commands:
+    ```sh
+    git pull
+    pnpm install
+    pnpm build
+    ```
 
 ***
 
@@ -211,7 +213,7 @@ pm2 start app.js
 ??? faq "Error: Cannot find module './build/Release/image.node'"
     The native image functions haven't been built. Run `pnpm run build` to build them.
 
-??? faq "pnpm fails with error 'ELIFECYCLE  Command failed.'"
+??? faq "`pnpm install` or `pnpm build` fails with error 'ELIFECYCLE  Command failed.'"
     You seem to be missing node-gyp. This can be fixed by running:
     ```sh
     pnpm i -g node-gyp
@@ -225,16 +227,6 @@ pm2 start app.js
 ??? faq "Gifs from Tenor result in a "no decode delegate for this image format" or "improper image header" error"
     Tenor GIFs are actually stored as MP4s, which libvips can't decode most of the time. You'll need to get a Tenor API key from [here](https://developers.google.com/tenor/guides/quickstart) and put it in the `TENOR` variable in .env.
 
-??? faq "Emojis are missing in some commands"
-    Your system doesn't have an emoji font installed. You can install Google's emoji set with `sudo apt-get install fonts-noto-color-emoji` on Debian/Ubuntu systems, `doas apk add font-noto-emoji` on Alpine, and `sudo pacman -S noto-fonts-emoji` on Arch/Manjaro.
-
-    If you want to use the same set that Discord and the main bot uses (Twemoji) on Fedora, then you can run `sudo dnf remove google-noto-emoji-color-fonts && sudo dnf install twitter-twemoji-fonts`.
-
-    If you want to install Twemoji on another distro then it's slightly more difficult. Go [here](https://koji.fedoraproject.org/koji/packageinfo?packageID=26306) and choose the latest build, then download the `noarch` RPM file. You'll then have to extract this file; most graphical tools (e.g. 7-Zip, Ark, The Unarchiver) should be able to extract this just fine, but on the command line you'll have to use the `rpm2cpio` tool. The font file should be inside the archive at `usr/share/fonts/Twemoji/Twemoji.ttf`; copy this to `/usr/share/fonts/Twemoji.ttf` (note the / at the beginning). After this, run `fc-cache -fv` and you should be good to go!
-
-??? faq "Sound/music commands do nothing"
-    Make sure Lavalink is running and started up completely. The bot skips loading sound commands if Lavalink is not present, so make sure it's running when the bot starts as well.
-
 ***
 
-If you have any further questions regarding self-hosting, feel free to ask in the #self-hosting-support channel on the [esmBot Support server](https://projectlounge.pw/support).
+If you have any further questions regarding self-hosting, feel free to ask in the #support channel on the [esmBot Support server](https://esmbot.net/support).

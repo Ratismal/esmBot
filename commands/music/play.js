@@ -1,16 +1,21 @@
 import { play } from "../../utils/soundplayer.js";
 import MusicCommand from "../../classes/musicCommand.js";
-const prefixes = ["ytsearch:", "ytmsearch:", "scsearch:", "spsearch:", "amsearch:"];
+const prefixes = ["scsearch:", "spsearch:", "sprec:", "amsearch:", "dzsearch:", "dzisrc:"];
+if (process.env.YT_DISABLED !== "true") prefixes.push("ytsearch:", "ytmsearch:");
 
 class PlayCommand extends MusicCommand {
   async run() {
+    if (!this.guild) {
+      this.success = false;
+      return "This command only works in servers!";
+    }
     const input = this.options.query ?? this.args.join(" ");
-    if (!input && ((!this.message || this.message?.attachments.length <= 0))) {
+    if (!input && (!this.message || this.message?.attachments.size <= 0)) {
       this.success = false;
       return "You need to provide what you want to play!";
     }
     let query = input ? input.trim() : "";
-    const attachment = this.type === "classic" ? this.message.attachments[0] : null;
+    const attachment = this.type === "classic" ? this.message?.attachments.first() : undefined;
     if (query.startsWith("||") && query.endsWith("||")) {
       query = query.substring(2, query.length - 2);
     }
@@ -19,10 +24,10 @@ class PlayCommand extends MusicCommand {
     }
     try {
       const url = new URL(query);
-      return await play(this.client, url, { channel: this.channel, member: this.member, type: this.type, interaction: this.interaction }, true);
+      return play(this.client, url.toString(), { channel: this.channel, guild: this.guild, member: this.member, type: this.type, interaction: this.interaction });
     } catch {
-      const search = prefixes.some(v => query.startsWith(v)) ? query : !query && attachment ? attachment.url : `ytsearch:${query}`;
-      return await play(this.client, search, { channel: this.channel, member: this.member, type: this.type, interaction: this.interaction }, true);
+      const search = prefixes.some(v => query.startsWith(v)) ? query : !query && attachment ? attachment.url : (process.env.YT_DISABLED !== "true" ? `ytsearch:${query}` : `dzsearch:${query}`);
+      return play(this.client, search, { channel: this.channel, guild: this.guild, member: this.member, type: this.type, interaction: this.interaction });
     }
   }
 
@@ -34,7 +39,7 @@ class PlayCommand extends MusicCommand {
   }];
   static description = "Plays a song or adds it to the queue";
   static aliases = ["p"];
-  static arguments = ["[url]"];
+  static args = ["[url]"];
 }
 
 export default PlayCommand;

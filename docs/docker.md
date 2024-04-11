@@ -1,6 +1,7 @@
 # Docker
-You can run the bot as well as its dependencies as a series of Docker containers. However, the manual setup is still recommended if you want more control over the bot.  
-To start, install Docker on your system via the instructions here: https://docs.docker.com/engine/install/#server
+You can run the bot as well as its dependencies as a series of Docker containers. However, the manual setup is still recommended if you want more control over the bot.
+
+[To start, install Docker on your system via the instructions here.](https://docs.docker.com/engine/install/#server)
 
 Once you've installed Docker, you should clone the esmBot repo:
 ```sh
@@ -16,7 +17,7 @@ You should then modify the `config/servers.json` file to change the IP addresses
 ```json
 {
   "lava": [
-    { "name": "localhost", "url": "lavalink:2333", "auth": "youshallnotpass", "local": true }
+    { "name": "localhost", "url": "lavalink:2333", "auth": "youshallnotpass" }
   ],
   "image": [
     { "server": "api", "auth": "verycoolpass100", "tls": false }

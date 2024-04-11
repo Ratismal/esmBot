@@ -3,13 +3,14 @@ import MusicCommand from "../../classes/musicCommand.js";
 class SeekCommand extends MusicCommand {
   async run() {
     this.success = false;
-    if (!this.channel.guild) return "This command only works in servers!";
-    if (!this.member.voiceState.channelID) return "You need to be in a voice channel first!";
-    if (!this.channel.guild.members.get(this.client.user.id).voiceState.channelID) return "I'm not in a voice channel!";
+    if (!this.guild) return "This command only works in servers!";
+    if (!this.member.voiceState) return "You need to be in a voice channel first!";
+    if (!this.guild.voiceStates.has(this.client.user.id)) return "I'm not in a voice channel!";
+    if (!this.connection) return "Something odd happened to the voice connection; try playing your song again.";
     if (this.connection.host !== this.author.id) return "Only the current voice session host can seek the music!";
     const player = this.connection.player;
     const track = await player.node.rest.decode(player.track);
-    if (!track.isSeekable) return "This track isn't seekable!";
+    if (!track?.info.isSeekable) return "This track isn't seekable!";
     const pos = this.options.position ?? this.args[0];
     let seconds;
     if (typeof pos === "string" && pos.includes(":")) {
@@ -17,7 +18,7 @@ class SeekCommand extends MusicCommand {
     } else {
       seconds = parseFloat(pos);
     }
-    if (isNaN(seconds) || (seconds * 1000) > track.length || (seconds * 1000) < 0) return "That's not a valid position!";
+    if (Number.isNaN(seconds) || (seconds * 1000) > track.info.length || (seconds * 1000) < 0) return "That's not a valid position!";
     player.seekTo(seconds * 1000);
     this.success = true;
     return `🔊 Seeked track to ${seconds} second(s).`;
@@ -31,7 +32,7 @@ class SeekCommand extends MusicCommand {
   }];
   static description = "Seeks to a different position in the music";
   static aliases = ["pos"];
-  static arguments = ["[seconds]"];
+  static args = ["[seconds]"];
 }
 
 export default SeekCommand;

@@ -1,43 +1,36 @@
-#include <napi.h>
-
 #include <vips/vips8>
+
+#include "common.h"
 
 using namespace std;
 using namespace vips;
 
-Napi::Value ToGif(const Napi::CallbackInfo &info) {
-  Napi::Env env = info.Env();
-  Napi::Object result = Napi::Object::New(env);
+ArgumentMap ToGif(const string& type, string& outType, const char* bufferdata, size_t bufferLength, [[maybe_unused]] ArgumentMap arguments, size_t& dataSize)
+{
+  if (type == "gif") {
+    dataSize = bufferLength;
+    char *data = reinterpret_cast<char*>(malloc(bufferLength));
+    memcpy(data, bufferdata, bufferLength);
 
-  try {
-    Napi::Object obj = info[0].As<Napi::Object>();
-    Napi::Buffer<char> data = obj.Get("data").As<Napi::Buffer<char>>();
-    string type = obj.Get("type").As<Napi::String>().Utf8Value();
+    ArgumentMap output;
+    output["buf"] = data;
 
-    if (type == "gif") {
-      result.Set("data", data);
-      result.Set("type", "gif");
-    } else {
-      VOption *options = VImage::option()->set("access", "sequential");
+    return output;
 
-      VImage in = VImage::new_from_buffer(data.Data(), data.Length(), "",
-                                          type == "webp" ? options->set("n", -1)
-                                                         : options);
+  } else {
+    VOption *options = VImage::option()->set("access", "sequential");
 
-      void *buf;
-      size_t length;
-      in.write_to_buffer(".gif", &buf, &length);
+    VImage in = VImage::new_from_buffer(
+        bufferdata, bufferLength, "",
+        type == "webp" ? options->set("n", -1) : options);
 
-      result.Set("data", Napi::Buffer<char>::Copy(env, (char *)buf, length));
-      result.Set("type", "gif");
-    }
-  } catch (std::exception const &err) {
-    Napi::Error::New(env, err.what()).ThrowAsJavaScriptException();
-  } catch (...) {
-    Napi::Error::New(env, "Unknown error").ThrowAsJavaScriptException();
+    char *buf;
+    in.write_to_buffer(".gif", reinterpret_cast<void**>(&buf), &dataSize);
+    outType = "gif";
+
+    ArgumentMap output;
+    output["buf"] = buf;
+
+    return output;
   }
-
-  vips_error_clear();
-  vips_thread_shutdown();
-  return result;
 }

@@ -1,12 +1,15 @@
 import InteractionCollector from "./awaitinteractions.js";
-import { ComponentInteraction } from "eris";
 
+/**
+ * @param {import("oceanic.js").Client} client
+ * @param {{ type: string; message: import("oceanic.js").Message; interaction: import("oceanic.js").CommandInteraction; author: import("oceanic.js").User | import("oceanic.js").Member; }} info
+ */
 export default async (client, info, pages, timeout = 120000) => {
   const options = info.type === "classic" ? {
     messageReference: {
-      channelID: info.channel.id,
+      channelID: info.message.channelID,
       messageID: info.message.id,
-      guildID: info.channel.guild ? info.channel.guild.id : undefined,
+      guildID: info.message.guildID,
       failIfNotExists: false
     },
     allowedMentions: {
@@ -26,7 +29,7 @@ export default async (client, info, pages, timeout = 120000) => {
             name: "◀"
           },
           style: 1,
-          custom_id: "back"
+          customID: "back"
         },
         {
           type: 2,
@@ -36,7 +39,7 @@ export default async (client, info, pages, timeout = 120000) => {
             name: "▶"
           },
           style: 1,
-          custom_id: "forward"
+          customID: "forward"
         },
         {
           type: 2,
@@ -46,7 +49,7 @@ export default async (client, info, pages, timeout = 120000) => {
             name: "🔢"
           },
           style: 1,
-          custom_id: "jump"
+          customID: "jump"
         },
         {
           type: 2,
@@ -56,24 +59,25 @@ export default async (client, info, pages, timeout = 120000) => {
             name: "🗑"
           },
           style: 4,
-          custom_id: "delete"
+          customID: "delete"
         }
       ]
     }]
   };
   let currentPage;
   if (info.type === "classic") {
-    currentPage = await client.createMessage(info.message.channel.id, Object.assign(pages[page], options, pages.length > 1 ? components : {}));
+    currentPage = await client.rest.channels.createMessage(info.message.channelID, Object.assign(pages[page], options, pages.length > 1 ? components : {}));
   } else {
-    await info.interaction[info.interaction.acknowledged ? "editOriginalMessage" : "createMessage"](Object.assign(pages[page], pages.length > 1 ? components : {}));
-    currentPage = await info.interaction.getOriginalMessage();
+    const response = await info.interaction[info.interaction.acknowledged ? "createFollowup" : "createMessage"](Object.assign(pages[page], pages.length > 1 ? components : {}));
+    currentPage = await response.getMessage();
+    if (!currentPage) currentPage = await info.interaction.getOriginal();
   }
   
   if (pages.length > 1) {
-    const interactionCollector = new InteractionCollector(client, currentPage, ComponentInteraction, timeout);
+    const interactionCollector = new InteractionCollector(client, currentPage, timeout);
     interactionCollector.on("interaction", async (interaction) => {
       if ((interaction.member ?? interaction.user).id === info.author.id) {
-        switch (interaction.data.custom_id) {
+        switch (interaction.data.customID) {
           case "back":
             await interaction.deferUpdate();
             page = page > 0 ? --page : pages.length - 1;
@@ -86,20 +90,20 @@ export default async (client, info, pages, timeout = 120000) => {
             currentPage = await currentPage.edit(Object.assign(pages[page], options));
             interactionCollector.extend();
             break;
-          case "jump":
+          case "jump": {
             await interaction.deferUpdate();
-            var newComponents = JSON.parse(JSON.stringify(components));
+            const newComponents = JSON.parse(JSON.stringify(components));
             for (const index of newComponents.components[0].components.keys()) {
               newComponents.components[0].components[index].disabled = true;
             }
             currentPage = await currentPage.edit(newComponents);
             interactionCollector.extend();
-            var jumpComponents = {
+            const jumpComponents = {
               components: [{
                 type: 1,
                 components: [{
                   type: 3,
-                  custom_id: "seekDropdown",
+                  customID: "seekDropdown",
                   placeholder: "Page Number",
                   options: []
                 }]
@@ -112,13 +116,13 @@ export default async (client, info, pages, timeout = 120000) => {
               };
               jumpComponents.components[0].components[0].options[i] = payload;
             }
-            var promise;
+            let promise;
             if (info.type === "classic") {
-              promise = client.createMessage(info.message.channel.id, Object.assign({ content: "What page do you want to jump to?" }, {
+              promise = client.rest.channels.createMessage(info.message.channelID, Object.assign({ content: "What page do you want to jump to?" }, {
                 messageReference: {
-                  channelID: currentPage.channel.id,
+                  channelID: currentPage.channelID,
                   messageID: currentPage.id,
-                  guildID: currentPage.channel.guild ? currentPage.channel.guild.id : undefined,
+                  guildID: currentPage.guildID,
                   failIfNotExists: false
                 },
                 allowedMentions: {
@@ -126,19 +130,19 @@ export default async (client, info, pages, timeout = 120000) => {
                 }
               }, jumpComponents));
             } else {
-              promise = info.interaction.createFollowup(Object.assign({ content: "What page do you want to jump to?" }, jumpComponents));
+              promise = (await info.interaction.createFollowup(Object.assign({ content: "What page do you want to jump to?" }, jumpComponents))).getMessage();
             }
             promise.then(askMessage => {
-              const dropdownCollector = new InteractionCollector(client, askMessage, ComponentInteraction, timeout);
+              const dropdownCollector = new InteractionCollector(client, askMessage, timeout);
               let ended = false;
               dropdownCollector.on("interaction", async (response) => {
-                if (response.data.custom_id !== "seekDropdown") return;
+                if (response.data.customID !== "seekDropdown") return;
                 try {
-                  if (askMessage.channel.messages ? askMessage.channel.messages.has(askMessage.id) : await client.getMessage(askMessage.channel.id, askMessage.id).catch(() => undefined)) await askMessage.delete();
+                  await askMessage.delete();
                 } catch {
                   // no-op
                 }
-                page = Number(response.data.values[0]);
+                page = Number(response.data.values.raw[0]);
                 currentPage = await currentPage.edit(Object.assign(pages[page], options, components));
                 ended = true;
                 dropdownCollector.stop();
@@ -146,7 +150,7 @@ export default async (client, info, pages, timeout = 120000) => {
               dropdownCollector.once("end", async () => {
                 if (ended) return;
                 try {
-                  if (askMessage.channel.messages ? askMessage.channel.messages.has(askMessage.id) : await client.getMessage(askMessage.channel.id, askMessage.id).catch(() => undefined)) await askMessage.delete();
+                  await askMessage.delete();
                 } catch {
                   // no-op
                 }
@@ -156,10 +160,15 @@ export default async (client, info, pages, timeout = 120000) => {
               throw error;
             });
             break;
+          }
           case "delete":
             await interaction.deferUpdate();
             interactionCollector.emit("end", true);
-            if (currentPage.channel.messages ? currentPage.channel.messages.has(currentPage.id) : await client.getMessage(currentPage.channel.id, currentPage.id).catch(() => undefined)) await currentPage.delete();
+            try {
+              await currentPage.delete();
+            } catch {
+              // no-op
+            }
             return;
           default:
             break;
@@ -172,8 +181,10 @@ export default async (client, info, pages, timeout = 120000) => {
         for (const index of components.components[0].components.keys()) {
           components.components[0].components[index].disabled = true;
         }
-        if (currentPage.channel.messages ? currentPage.channel.messages.has(currentPage.id) : await client.getMessage(currentPage.channel.id, currentPage.id).catch(() => undefined)) {
+        try {
           await currentPage.edit(components);
+        } catch {
+          // no-op
         }
       }
     });

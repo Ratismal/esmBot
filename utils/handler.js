@@ -1,25 +1,25 @@
-import { paths, commands, messageCommands, info, sounds, categories, aliases as _aliases } from "./collections.js";
+import { paths, commands, messageCommands, info, categories, aliases as _aliases } from "./collections.js";
 import { log } from "./logger.js";
 
-import { readFileSync } from "fs";
-
-const { blacklist } = JSON.parse(readFileSync(new URL("../config/commands.json", import.meta.url)));
+import commandConfig from "../config/commands.json" assert { type: "json" };
+import { Constants } from "oceanic.js";
 
 let queryValue = 0;
 
-// load command into memory
-export async function load(client, command, soundStatus, slashReload = false) {
+/**
+ * Load a command into memory.
+ * @param {import("oceanic.js").Client | null} client
+ * @param {string} command
+ * @param {boolean} slashReload
+ */
+export async function load(client, command, slashReload = false) {
   const { default: props } = await import(`${command}?v=${queryValue}`);
   queryValue++;
-  if (props.requires.includes("sound") && soundStatus) {
-    log("warn", `Failed to connect to some Lavalink nodes, skipped loading command ${command}...`);
-    return;
-  }
   const commandArray = command.split("/");
   let commandName = commandArray[commandArray.length - 1].split(".")[0];
   const category = commandArray[commandArray.length - 2];
 
-  if (blacklist.includes(commandName)) {
+  if (commandConfig.blacklist.includes(commandName)) {
     log("warn", `Skipped loading blacklisted command ${command}...`);
     return;
   }
@@ -39,17 +39,17 @@ export async function load(client, command, soundStatus, slashReload = false) {
     category: category,
     description: props.description,
     aliases: props.aliases,
-    params: props.arguments,
+    params: props.args,
     flags: props.flags,
     slashAllowed: props.slashAllowed,
     directAllowed: props.directAllowed,
     adminOnly: props.adminOnly,
-    type: 1
+    type: Constants.ApplicationCommandTypes.CHAT_INPUT
   };
 
   if (category === "message") {
     messageCommands.set(commandName, props);
-    commandInfo.type = 3;
+    commandInfo.type = Constants.ApplicationCommandTypes.MESSAGE;
   } else {
     commands.set(commandName, props);
   }
@@ -57,8 +57,6 @@ export async function load(client, command, soundStatus, slashReload = false) {
   if (slashReload && props.slashAllowed) {
     await send(client);
   }
-
-  if (Object.getPrototypeOf(props).name === "SoundboardCommand") sounds.set(commandName, props.file);
 
   info.set(commandName, commandInfo);
 
@@ -86,7 +84,7 @@ export function update() {
         category: cmdInfo.category,
         description: cmd.description,
         aliases: cmd.aliases,
-        params: cmd.arguments,
+        params: cmd.args,
         flags: cmd.flags,
         slashAllowed: cmd.slashAllowed,
         directAllowed: cmd.directAllowed,
@@ -95,7 +93,7 @@ export function update() {
       };
       info.set(name, cmdInfo);
     }
-    if (cmdInfo?.type === 3) {
+    if (cmdInfo?.type === Constants.ApplicationCommandTypes.MESSAGE) {
       (cmdInfo.adminOnly ? privateCommandArray : commandArray).push({
         name: name,
         type: cmdInfo.type,
@@ -117,14 +115,17 @@ export function update() {
   };
 }
 
+/**
+ * @param {import("oceanic.js").Client} bot
+ */
 export async function send(bot) {
   const commandArray = update();
   log("info", "Sending application command data to Discord...");
   let cmdArray = commandArray.main;
   if (process.env.ADMIN_SERVER && process.env.ADMIN_SERVER !== "") {
-    await bot.bulkEditGuildCommands(process.env.ADMIN_SERVER, commandArray.private);
+    await bot.application.bulkEditGuildCommands(process.env.ADMIN_SERVER, commandArray.private);
   } else {
     cmdArray = [...commandArray.main, ...commandArray.private];
   }
-  await bot.bulkEditCommands(cmdArray);
+  await bot.application.bulkEditGlobalCommands(cmdArray);
 }

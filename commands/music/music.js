@@ -1,21 +1,22 @@
+import { Constants } from "oceanic.js";
 import Command from "../../classes/command.js";
 import { commands, aliases, info, categories } from "../../utils/collections.js";
 
 // all-in-one music command
 class MusicAIOCommand extends Command {
   async run() {
-    let cmd = this.type === "classic" ? this.args[0] : this.optionsArray[0].name;
-    if (cmd === "music" || this.constructor.aliases.includes(cmd)) return "https://projectlounge.pw/robotdance.gif";
+    let cmd = this.type === "classic" ? this.args[0] : this.interaction?.data.options.getSubCommand()?.[0];
+    if (cmd === "music" || this.constructor.aliases.includes(cmd)) return "https://esmbot.net/robotdance.gif";
     await this.acknowledge();
     if (this.type === "classic") {
       this.origOptions.args.shift();
     } else {
-      this.origOptions.interaction.data.options = this.origOptions.interaction.data.options[0].options;
+      this.origOptions.interaction.data.options.raw = this.origOptions.interaction.data.options.raw[0].options;
     }
     if (aliases.has(cmd)) cmd = aliases.get(cmd);
     if (commands.has(cmd) && info.get(cmd).category === "music") {
       const command = commands.get(cmd);
-      const inst = new command(this.client, this.cluster, this.worker, this.ipc, this.origOptions);
+      const inst = new command(this.client, this.origOptions);
       const result =  await inst.run();
       this.success = inst.success;
       return result;
@@ -32,7 +33,7 @@ class MusicAIOCommand extends Command {
       const cmdInfo = info.get(cmd);
       this.flags.push({
         name: cmd,
-        type: 1,
+        type: Constants.ApplicationCommandOptionTypes.SUB_COMMAND,
         description: cmdInfo.description,
         options: cmdInfo.flags
       });
@@ -41,7 +42,6 @@ class MusicAIOCommand extends Command {
   }
 
   static description = "Handles music playback";
-  static requires = ["sound"];
   static aliases = ["m"];
   static directAllowed = false;
 }

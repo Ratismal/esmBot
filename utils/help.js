@@ -30,6 +30,9 @@ export function generateList() {
   generated = true;
 }
 
+/**
+ * @param {string} output
+ */
 export async function createPage(output) {
   let template = `# <img src="https://raw.githubusercontent.com/esmBot/esmBot/master/docs/assets/esmbot.png" width="64"> esmBot${process.env.NODE_ENV === "development" ? " Dev" : ""} Command List
 
@@ -37,11 +40,7 @@ This page was last generated on \`${new Date().toString()}\`.
 
 \`[]\` means an argument is required, \`{}\` means an argument is optional.
 
-Default prefix is \`&\`.
-
 **Want to help support esmBot's development? Consider donating on Patreon!** https://patreon.com/TheEssem
-
-> Tip: You can get much more info about a command by using \`help [command]\` in the bot itself.
 `;
 
   template += "\n## Table of Contents\n";

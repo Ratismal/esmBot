@@ -2,12 +2,11 @@ import Command from "../../classes/command.js";
 
 class DiceCommand extends Command {
   async run() {
-    const max = this.options.max ?? parseInt(this.args[0]);
+    const max = this.interaction?.data.options.getInteger("max") ?? parseInt(this.args[0]);
     if (!max) {
       return `🎲 The dice landed on ${Math.floor(Math.random() * 6) + 1}.`;
-    } else {
-      return `🎲 The dice landed on ${Math.floor(Math.random() * max) + 1}.`;
     }
+    return `🎲 The dice landed on ${Math.floor(Math.random() * max) + 1}.`;
   }
 
   static flags = [{
@@ -19,7 +18,7 @@ class DiceCommand extends Command {
 
   static description = "Rolls the dice";
   static aliases = ["roll", "die", "rng", "random"];
-  static arguments = ["{number}"];
+  static args = ["{number}"];
 }
 
 export default DiceCommand;

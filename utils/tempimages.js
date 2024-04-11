@@ -1,11 +1,20 @@
-import * as logger from "../utils/logger.js";
-import { readdir, lstat, rm, writeFile } from "fs/promises";
+import logger from "../utils/logger.js";
+import { readdir, lstat, rm, writeFile, stat } from "fs/promises";
 
-export async function upload(client, ipc, result, context, interaction = false) {
+let dirSizeCache;
+
+/**
+ * @param {import("oceanic.js").Client} client
+ * @param {{ name: string; contents: Buffer; }} result
+ * @param {import("oceanic.js").CommandInteraction | import("oceanic.js").Message} context
+ */
+export async function upload(client, result, context, interaction = false) {
   const filename = `${Math.random().toString(36).substring(2, 15)}.${result.name.split(".")[1]}`;
-  await writeFile(`${process.env.TEMPDIR}/${filename}`, result.file);
-  const imageURL = `${process.env.TMP_DOMAIN || "https://tmp.projectlounge.pw"}/${filename}`;
-  const payload = {
+  await writeFile(`${process.env.TEMPDIR}/${filename}`, result.contents);
+  const imageURL = `${process.env.TMP_DOMAIN || "https://tmp.esmbot.net"}/${filename}`;
+  const payload = result.name.startsWith("SPOILER_") ? {
+    content: `The result image was more than 25MB in size, so it was uploaded to an external site instead.\n|| ${imageURL} ||`
+  } : {
     embeds: [{
       color: 16711680,
       title: "Here's your image!",
@@ -14,18 +23,18 @@ export async function upload(client, ipc, result, context, interaction = false) 
         url: imageURL
       },
       footer: {
-        text: "The result image was more than 8MB in size, so it was uploaded to an external site instead."
+        text: "The result image was more than 25MB in size, so it was uploaded to an external site instead."
       },
     }]
   };
   if (interaction) {
-    await context[context.acknowledged ? "editOriginalMessage" : "createMessage"](payload);
+    await context[context.acknowledged ? "createFollowup" : "createMessage"](payload);
   } else {
-    await client.createMessage(context.channel.id, Object.assign(payload, {
+    await client.rest.channels.createMessage(context.channelID, Object.assign(payload, {
       messageReference: {
-        channelID: context.channel.id,
+        channelID: context.channelID,
         messageID: context.id,
-        guildID: context.channel.guild ? context.channel.guild.id : undefined,
+        guildID: context.guildID ?? undefined,
         failIfNotExists: false
       },
       allowedMentions: {
@@ -34,13 +43,16 @@ export async function upload(client, ipc, result, context, interaction = false) 
     }));
   }
   if (process.env.THRESHOLD) {
-    const size = await ipc.centralStore.get("dirSizeCache") + result.file.length;
-    await ipc.centralStore.set("dirSizeCache", size);
-    await removeOldImages(ipc, size);
+    const size = dirSizeCache + result.contents.length;
+    dirSizeCache = size;
+    await removeOldImages(size);
   }
 }
 
-export async function removeOldImages(ipc, size) {
+async function removeOldImages(s) {
+  if (!process.env.THRESHOLD || process.env.THRESHOLD === "") return;
+  if (!process.env.TEMPDIR || process.env.TEMPDIR === "") return;
+  let size = s;
   if (size > process.env.THRESHOLD) {
     const files = (await readdir(process.env.TEMPDIR)).map((file) => {
       return lstat(`${process.env.TEMPDIR}/${file}`).then((stats) => {
@@ -54,7 +66,7 @@ export async function removeOldImages(ipc, size) {
     });
     
     const resolvedFiles = await Promise.all(files);
-    const oldestFiles = resolvedFiles.filter(Boolean).sort((a, b) => a.ctime - b.ctime);
+    const oldestFiles = resolvedFiles.filter(Boolean).sort((a, b) => a.ctime.getTime() - b.ctime.getTime());
 
     do {
       if (!oldestFiles[0]) break;
@@ -67,6 +79,32 @@ export async function removeOldImages(ipc, size) {
     const newSize = oldestFiles.reduce((a, b) => {
       return a + b.size;
     }, 0);
-    await ipc.centralStore.set("dirSizeCache", newSize);
+    dirSizeCache = newSize;
   }
+}
+
+export async function parseThreshold() {
+  if (!process.env.THRESHOLD || process.env.THRESHOLD === "") return;
+  if (!process.env.TEMPDIR || process.env.TEMPDIR === "") return;
+  const matched = process.env.THRESHOLD.match(/(\d+)([KMGT])/);
+  const sizes = {
+    K: 1024,
+    M: 1048576,
+    G: 1073741824,
+    T: 1099511627776
+  };
+  if (matched?.[1] && matched[2]) {
+    process.env.THRESHOLD = matched[1] * sizes[matched[2]];
+  } else {
+    logger.error("Invalid THRESHOLD config.");
+    process.env.THRESHOLD = undefined;
+  }
+  const dirstat = (await readdir(process.env.TEMPDIR)).map((file) => {
+    return stat(`${process.env.TEMPDIR}/${file}`).then((stats) => stats.size);
+  });
+  const size = await Promise.all(dirstat);
+  const reduced = size.reduce((a, b) => {
+    return a + b;
+  }, 0);
+  dirSizeCache = reduced;
 }
