@@ -3,6 +3,10 @@ import imagedetect from "../../utils/imagedetect.js";
 
 class StickerCommand extends Command {
   async run() {
+    if (!this.permissions.has("EMBED_LINKS")) {
+      this.success = false;
+      return this.getString("permissions.noEmbedLinks");
+    }
     const result = await imagedetect(this.client, this.message, this.interaction, this.options, false, false, true);
     this.success = false;
     if (!result) return "You need to provide a sticker!";
@@ -30,7 +34,8 @@ class StickerCommand extends Command {
 
   static description = "Gets a raw sticker image";
   static aliases = ["stick"];
-  static args = ["[sticker]"];
+  
+  static userAllowed = false;
 }
 
 export default StickerCommand;

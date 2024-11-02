@@ -1,34 +1,37 @@
 import logger from "../utils/logger.js";
-import { readdir, lstat, rm, writeFile, stat } from "fs/promises";
+import { readdir, lstat, rm, writeFile, stat } from "node:fs/promises";
+import { getString } from "./i18n.js";
 
 let dirSizeCache;
 
 /**
  * @param {import("oceanic.js").Client} client
- * @param {{ name: string; contents: Buffer; }} result
+ * @param {{ name: string; contents: Buffer; flags?: number; }} result
  * @param {import("oceanic.js").CommandInteraction | import("oceanic.js").Message} context
  */
-export async function upload(client, result, context, interaction = false) {
+export async function upload(client, result, context, success = true, interaction = false) {
   const filename = `${Math.random().toString(36).substring(2, 15)}.${result.name.split(".")[1]}`;
   await writeFile(`${process.env.TEMPDIR}/${filename}`, result.contents);
   const imageURL = `${process.env.TMP_DOMAIN || "https://tmp.esmbot.net"}/${filename}`;
   const payload = result.name.startsWith("SPOILER_") ? {
-    content: `The result image was more than 25MB in size, so it was uploaded to an external site instead.\n|| ${imageURL} ||`
+    content: `${getString("image.tempSite", interaction ? context.locale : undefined)}\n|| ${imageURL} ||`,
+    flags: result.flags ?? (success ? 0 : 64)
   } : {
     embeds: [{
       color: 16711680,
-      title: "Here's your image!",
+      title: getString("image.tempImageSent", interaction ? context.locale : undefined),
       url: imageURL,
       image: {
         url: imageURL
       },
       footer: {
-        text: "The result image was more than 25MB in size, so it was uploaded to an external site instead."
+        text: getString("image.tempSite", interaction ? context.locale : undefined)
       },
-    }]
+    }],
+    flags: result.flags ?? (success ? 0 : 64)
   };
   if (interaction) {
-    await context[context.acknowledged ? "createFollowup" : "createMessage"](payload);
+    await context.createFollowup(payload);
   } else {
     await client.rest.channels.createMessage(context.channelID, Object.assign(payload, {
       messageReference: {

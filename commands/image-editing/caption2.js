@@ -34,9 +34,8 @@ class CaptionTwoCommand extends ImageCommand {
     return this;
   }
 
-  static description = "Adds a me.me caption/tag list to an image";
+  static description = "Adds a bottom caption/tag list to an image";
   static aliases = ["tags2", "meirl", "memecaption", "medotmecaption"];
-  static args = ["{text}"];
 
   static textOptional = true;
   static noText = "You need to provide some text to add a caption!";

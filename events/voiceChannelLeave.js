@@ -1,15 +1,16 @@
-import { manager, players, queues, skipVotes } from "../utils/soundplayer.js";
+import { leaveChannel, players, queues, skipVotes } from "../utils/soundplayer.js";
 import AwaitRejoin from "../utils/awaitrejoin.js";
 import { random } from "../utils/misc.js";
 import logger from "../utils/logger.js";
 import { GuildChannel, VoiceChannel, StageChannel } from "oceanic.js";
+import { getString } from "../utils/i18n.js";
 
 const isWaiting = new Map();
 
 /**
  * @param {import("oceanic.js").Client} client
  * @param {import("oceanic.js").Member} member
- * @param {import("oceanic.js").VoiceChannel | import("oceanic.js").StageChannel} oldChannel
+ * @param {import("oceanic.js").VoiceChannel | import("oceanic.js").StageChannel | import("oceanic.js").Uncached | null} oldChannel
  */
 export default async (client, member, oldChannel) => {
   // block if client is not ready yet
@@ -18,20 +19,19 @@ export default async (client, member, oldChannel) => {
   if (!oldChannel) return;
   const connection = players.get(member.guildID);
   if (connection && oldChannel.id === connection.voiceChannel.id) {
-    const fullChannel = oldChannel.voiceMembers ? oldChannel : await client.rest.channels.get(oldChannel.id);
+    const fullChannel = oldChannel.voiceMembers ? oldChannel : connection.voiceChannel;
     if (!(fullChannel instanceof VoiceChannel) && !(fullChannel instanceof StageChannel)) return;
     if (fullChannel.voiceMembers.filter((i) => i.id !== client.user.id && !i.bot).length === 0) {
       if (isWaiting.has(oldChannel.id)) return;
       isWaiting.set(oldChannel.id, true);
       connection.player.setPaused(true);
       const waitMessage = await client.rest.channels.createMessage(connection.originalChannel.id, {
-        content: "🔊 Waiting 10 seconds for someone to return..."
+        content: `🔊 ${getString("sound.waitingForSomeone")}` // TODO: find a way to get locale
       });
       const awaitRejoin = new AwaitRejoin(fullChannel, true, member.id);
-      awaitRejoin.once("end", async (rejoined, newMember, cancel) => {
+      awaitRejoin.once("end", async (rejoined, newMember) => {
         isWaiting.delete(oldChannel.id);
         if (rejoined) {
-          if (cancel) return;
           connection.player.setPaused(false);
           if (member.id !== newMember.id) {
             players.set(connection.voiceChannel.guildID, { player: connection.player, host: newMember.id, voiceChannel: connection.voiceChannel, originalChannel: connection.originalChannel, loop: connection.loop, shuffle: connection.shuffle, playMessage: connection.playMessage });
@@ -51,7 +51,6 @@ export default async (client, member, oldChannel) => {
           } catch {
             logger.warn(`Failed to delete wait message ${waitMessage.id}`);
           }
-          if (cancel) return;
           await handleExit(client, connection);
         }
       });
@@ -59,7 +58,7 @@ export default async (client, member, oldChannel) => {
       if (isWaiting.has(oldChannel.id)) return;
       isWaiting.set(oldChannel.id, true);
       const waitMessage = await client.rest.channels.createMessage(connection.originalChannel.id, {
-        content: "🔊 Waiting 10 seconds for the host to return..."
+        content: `🔊 ${getString("sound.waitingForHost")}` // TODO: find a way to get locale
       });
       const awaitRejoin = new AwaitRejoin(fullChannel, false, member.id);
       awaitRejoin.once("end", async (rejoined) => {
@@ -97,18 +96,16 @@ export default async (client, member, oldChannel) => {
 
 /**
  * @param {import("oceanic.js").Client} client
- * @param {{ player?: import("shoukaku").Player; host?: string; voiceChannel: any; originalChannel: any; loop?: boolean; shuffle?: boolean; playMessage?: import("oceanic.js").Message; }} connection
+ * @param {{ player?: import("shoukaku").Player; host?: string; voiceChannel: import("oceanic.js").VoiceChannel; originalChannel: import("oceanic.js").GuildChannel; loop?: boolean; shuffle?: boolean; playMessage?: import("oceanic.js").Message; }} connection
  */
 async function handleExit(client, connection) {
-  if (connection.originalChannel instanceof GuildChannel) {
-    try {
-      await manager.leaveVoiceChannel(connection.originalChannel.guildID);
-    } catch {
-      logger.warn(`Failed to leave voice channel ${connection.originalChannel.guildID}`);
-    }
-    players.delete(connection.originalChannel.guildID);
-    queues.delete(connection.originalChannel.guildID);
-    skipVotes.delete(connection.originalChannel.guildID);
+  players.delete(connection.originalChannel.guildID);
+  queues.delete(connection.originalChannel.guildID);
+  skipVotes.delete(connection.originalChannel.guildID);
+  try {
+    await leaveChannel(connection.originalChannel.guildID);
+  } catch {
+    logger.warn(`Failed to leave voice channel ${connection.originalChannel.guildID}`);
   }
   try {
     await client.rest.channels.createMessage(connection.originalChannel.id, {

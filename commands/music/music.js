@@ -20,10 +20,9 @@ class MusicAIOCommand extends Command {
       const result =  await inst.run();
       this.success = inst.success;
       return result;
-    } else {
-      this.success = false;
-      return "That isn't a valid music command!";
     }
+    this.success = false;
+    return this.getString("commands.responses.music.invalid");
   }
 
   static postInit() {
@@ -44,6 +43,7 @@ class MusicAIOCommand extends Command {
   static description = "Handles music playback";
   static aliases = ["m"];
   static directAllowed = false;
+  static userAllowed = false;
 }
 
 export default MusicAIOCommand;

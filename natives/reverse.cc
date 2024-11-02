@@ -1,4 +1,3 @@
-#include <algorithm>
 #include <vips/vips8>
 
 #include "common.h"
@@ -10,50 +9,69 @@ ArgumentMap Reverse([[maybe_unused]] const string& type, string& outType, const 
 {
   bool soos = GetArgumentWithFallback<bool>(arguments, "soos", false);
 
-  VOption *options =
-      VImage::option()->set("access", "sequential")->set("n", -1);
-
-  VImage in = VImage::new_from_buffer(bufferdata, bufferLength, "", options)
+  VImage in = VImage::new_from_buffer(bufferdata, bufferLength, "", GetInputOptions(type, false, false))
                   .colourspace(VIPS_INTERPRETATION_sRGB);
 
   int width = in.width();
   int pageHeight = vips_image_get_page_height(in.get_image());
   int nPages = vips_image_get_n_pages(in.get_image());
 
-  vector<VImage> split;
-  // todo: find a better way of getting individual frames (or at least getting
-  // the frames in reverse order)
-  for (int i = 0; i < nPages; i++) {
-    VImage img_frame = in.crop(0, i * pageHeight, width, pageHeight);
-    split.push_back(img_frame);
+  try {
+    in = NormalizeVips(in, &width, &pageHeight, nPages);
+  } catch (int e) {
+    if (e == -1) {
+      ArgumentMap output;
+      output["buf"] = "";
+      outType = "frames";
+      return output;
+    }
   }
 
-  vector<int> delays = in.get_array_int("delay");
+  // this command is useless with single-page images
+  if (nPages < 2) {
+    dataSize = bufferLength;
+    char *data = reinterpret_cast<char*>(malloc(bufferLength));
+    memcpy(data, bufferdata, bufferLength);
+
+    ArgumentMap output;
+    output["buf"] = data;
+
+    return output;
+  }
+
+  vector<VImage> out;
+  vector<int> delaysOut;
+  int *delays;
+  in.get_array_int("delay", &delays, NULL);
   if (soos) {
-    vector<VImage> copy = split;
-    vector<int> copy2 = delays;
-    reverse(copy.begin(), copy.end());
-    reverse(copy2.begin(), copy2.end());
-    copy.pop_back();
-    copy2.pop_back();
-    copy.erase(copy.begin());
-    copy2.erase(copy2.begin());
-    split.insert(split.end(), copy.begin(), copy.end());
-    delays.insert(delays.end(), copy2.begin(), copy2.end());
+    for (int i = 0; i < nPages; i++) {
+      VImage img_frame = in.crop(0, i * pageHeight, width, pageHeight);
+      out.push_back(img_frame);
+      delaysOut.push_back(delays[i]);
+    }
+
+    for (int i = nPages - 2; i > 0; i--) {
+      VImage img_frame = in.crop(0, i * pageHeight, width, pageHeight);
+      out.push_back(img_frame);
+      delaysOut.push_back(delays[i]);
+    }
   } else {
-    reverse(split.begin(), split.end());
-    reverse(delays.begin(), delays.end());
+    for (int i = nPages - 1; i > -1; i--) {
+      VImage img_frame = in.crop(0, i * pageHeight, width, pageHeight);
+      out.push_back(img_frame);
+      delaysOut.push_back(delays[i]);
+    }
   }
 
-  VImage final = VImage::arrayjoin(split, VImage::option()->set("across", 1));
+  VImage final = VImage::arrayjoin(out, VImage::option()->set("across", 1));
   final.set(VIPS_META_PAGE_HEIGHT, pageHeight);
-  final.set("delay", delays);
+  final.set("delay", delaysOut);
+
+  if (outType != "webp") outType = "gif";
 
   char *buf;
-  final.write_to_buffer(".gif", reinterpret_cast<void**>(&buf), &dataSize,
-                        VImage::option()->set("dither", 0));
-
-  outType = "gif";
+  final.write_to_buffer(outType == "webp" ? ".webp" : ".gif", reinterpret_cast<void**>(&buf), &dataSize,
+                        outType == "gif" ? VImage::option()->set("dither", 0) : 0);
 
   ArgumentMap output;
   output["buf"] = buf;

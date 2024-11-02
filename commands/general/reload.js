@@ -11,10 +11,10 @@ class ReloadCommand extends Command {
     await this.acknowledge();
     const path = paths.get(commandName);
     if (!path) return "I couldn't find that command!";
-    const result = await load(this.client, path, true);
+    const result = await load(this.client, path, this.options.skipsend);
     if (result !== commandName) return "I couldn't reload that command!";
     if (process.env.PM2_USAGE) {
-      process.send({
+      process.send?.({
         type: "process:msg",
         data: {
           type: "reload",
@@ -29,11 +29,16 @@ class ReloadCommand extends Command {
     name: "cmd",
     type: 3,
     description: "The command to reload",
+    classic: true,
     required: true
+  }, {
+    name: "skipsend",
+    type: 5,
+    description: "Skips sending new application command data to Discord",
+    classic: true
   }];
 
   static description = "Reloads a command";
-  static args = ["[command]"];
   static adminOnly = true;
 }
 

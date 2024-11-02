@@ -1,24 +1,24 @@
 import paginator from "../../utils/pagination/pagination.js";
-import serversConfig from "../../config/servers.json" assert { type: "json" };
+import serversConfig from "../../config/servers.json" with { type: "json" };
 import { random } from "../../utils/misc.js";
 import Command from "../../classes/command.js";
 
 class ImageSearchCommand extends Command {
   async run() {
     this.success = false;
-    if (!this.permissions.has("EMBED_LINKS")) return "I don't have the `Embed Links` permission!";
+    if (!this.permissions.has("EMBED_LINKS")) return this.getString("permissions.noEmbedLinks");
     const query = this.options.query ?? this.args.join(" ");
     if (!query || !query.trim()) return "You need to provide something to search for!";
     await this.acknowledge();
     const embeds = [];
     const rawImages = await fetch(`${random(serversConfig.searx)}/search?format=json&safesearch=2&engines=google%20images,bing%20images&q=${encodeURIComponent(query)}`).then(res => res.json());
     if (rawImages.results.length === 0) return "I couldn't find any results!";
-    const images = rawImages.results.filter((val) => !val.img_src.startsWith("data:"));
+    const images = rawImages.results.filter((val) => val.img_src.startsWith("https://") && val.url.startsWith("https://"));
     for (const [i, value] of images.entries()) {
       embeds.push({
         embeds: [{
           title: value.title,
-          url: value.url,
+          url: encodeURI(value.url),
           color: 16711680,
           footer: {
             text: `Page ${i + 1} of ${images.length}`
@@ -41,12 +41,12 @@ class ImageSearchCommand extends Command {
     name: "query",
     type: 3,
     description: "The query you want to search for",
+    classic: true,
     required: true
   }];
 
   static description = "Searches for images across the web";
   static aliases = ["im", "photo", "img"];
-  static args = ["[query]"];
 }
 
 export default ImageSearchCommand;

@@ -1,4 +1,5 @@
-import { Constants } from "oceanic.js";
+import { Constants, Permission } from "oceanic.js";
+import { getString } from "../utils/i18n.js";
 
 class Command {
   /**
@@ -14,11 +15,14 @@ class Command {
     this.edit = false;
     if (options.type === "classic") {
       this.message = options.message;
+      this.locale = process.env.LOCALE ?? "en-US";
+      this.cmdName = options.cmdName;
       this.channel = options.message.channel;
       this.guild = options.message.guild;
       this.author = options.message.author;
       this.member = options.message.member;
-      this.permissions = this.channel?.permissionsOf?.(client.user.id) ?? Constants.AllTextPermissions;
+      this.permissions = this.channel?.permissionsOf?.(client.user.id) ?? new Permission(Constants.AllPermissions);
+      this.memberPermissions = this.member?.permissions ?? new Permission(Constants.AllPermissions);
       this.content = options.content;
       this.options = options.specialArgs;
       this.reference = {
@@ -34,12 +38,19 @@ class Command {
       };
     } else {
       this.interaction = options.interaction;
+      this.locale = options.interaction.locale;
+      this.cmdName = options.interaction.data.name;
       this.args = [];
       this.channel = options.interaction.channel ?? { id: options.interaction.channelID, guildID: options.interaction.guildID };
-      this.guild = options.interaction.guild;
+      if (!options.interaction.authorizingIntegrationOwners || options.interaction.authorizingIntegrationOwners[0] !== undefined) {
+        this.guild = options.interaction.guild;
+      } else {
+        this.guild = null;
+      }
       this.author = options.interaction.user;
       this.member = options.interaction.member;
       this.permissions = options.interaction.appPermissions;
+      this.memberPermissions = options.interaction.memberPermissions ?? new Permission(Constants.AllPermissions);
       this.options = options.interaction.data.options.raw.reduce((obj, item) => {
         obj[item.name] = item.value;
         return obj;
@@ -55,16 +66,18 @@ class Command {
     return "It works!";
   }
 
-  /**
-   * @param {number | undefined} [flags]
-   */
-  async acknowledge(flags) {
+  async acknowledge() {
     if (this.type === "classic" && this.message) {
       const channel = this.channel ?? await this.client.rest.channels.get(this.message.channelID);
       await channel.sendTyping();
-    } else if (this.interaction && !this.interaction.acknowledged) {
-      await this.interaction.defer(flags);
     }
+  }
+
+  /**
+   * @param {string} key
+   */
+  getString(key, returnNull = false) {
+    return getString(key, this.locale, returnNull);
   }
 
   static init() {
@@ -73,10 +86,11 @@ class Command {
 
   static description = "No description found";
   static aliases = [];
-  static args = [];
   static flags = [];
+  static ephemeral = false;
   static slashAllowed = true;
   static directAllowed = true;
+  static userAllowed = true;
   static adminOnly = false;
 }
 

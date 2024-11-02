@@ -1,5 +1,6 @@
 #pragma once
 
+#include <vips/vips8>
 #include <fontconfig/fontconfig.h>
 
 #include <iostream>
@@ -19,6 +20,8 @@ typedef map<string, ArgumentVariant> ArgumentMap;
 #include "commands.h"
 
 void LoadFonts(string basePath);
+vips::VImage NormalizeVips(vips::VImage in, int *width, int *pageHeight, int nPages);
+vips::VOption* GetInputOptions(string type, bool sequential, bool sequentialIfAnim);
 #define MapContainsKey(MAP, KEY) (MAP.find(KEY) != MAP.end())
 
 template <typename T>
@@ -41,7 +44,8 @@ const std::vector<double> zeroVecOneAlpha = {0, 0, 0, 1};
 const std::unordered_map<std::string, std::string> fontPaths{
     {"futura", "assets/fonts/caption.otf"},
     {"helvetica", "assets/fonts/caption2.ttf"},
-    {"roboto", "assets/fonts/reddit.ttf"}};
+    {"roboto", "assets/fonts/reddit.ttf"},
+    {"ubuntu", "assets/fonts/Ubuntu.ttf"}};
 
 const std::map<std::string,
                ArgumentMap (*)(const string& type, string& outType, const char* bufferData,
@@ -51,9 +55,7 @@ const std::map<std::string,
                    {"bounce", &Bounce},
                    {"caption", &Caption},
                    {"captionTwo", &CaptionTwo},
-#ifdef MAGICK_ENABLED
                    {"circle", &Circle},
-#endif
                    {"colors", &Colors},
                    {"crop", &Crop},
                    {"deepfry", &Deepfry},
@@ -80,9 +82,7 @@ const std::map<std::string,
                    {"scott", &Scott},
                    {"snapchat", &Snapchat},
                    {"speed", &Speed},
-#ifdef MAGICK_ENABLED
                    {"spin", &Spin},
-#endif
                    {"spotify", &Spotify},
                    {"squish", &Squish},
                    {"swirl", &Swirl},

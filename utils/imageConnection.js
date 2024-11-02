@@ -1,6 +1,6 @@
 import WebSocket from "ws";
 import logger from "./logger.js";
-import { setTimeout } from "timers/promises";
+import { setTimeout } from "node:timers/promises";
 
 const Rerror = 0x01;
 const Tqueue = 0x02;
@@ -10,12 +10,15 @@ const Tcancel = 0x04;
 const Twait = 0x06;
 //const Rwait = 0x07;
 const Rinit = 0x08;
+const Rsent = 0x09;
+const Rclose = 0xFF;
 
 class ImageConnection {
-  constructor(host, auth, tls = false) {
+  constructor(host, auth, name, tls = false) {
     this.requests = new Map();
     this.host = host.includes(":") ? host : `${host}:3762`;
     this.auth = auth;
+    this.name = name;
     this.tag = 0;
     this.disconnected = false;
     this.formats = {};
@@ -44,11 +47,20 @@ class ImageConnection {
     this.conn.once("close", () => this.onClose());
   }
 
+  /**
+   * @param {WebSocket.RawData} msg
+   */
   async onMessage(msg) {
     const op = msg.readUint8(0);
+    logger.debug(`Received message from image server ${this.host} with opcode ${op}`);
     if (op === Rinit) {
       this.formats = JSON.parse(msg.toString("utf8", 7));
       this.funcs = Object.keys(this.formats);
+      return;
+    }
+    if (op === Rclose) {
+      this.reconnect = true;
+      this.close();
       return;
     }
     const tag = msg.readUint16LE(1);
@@ -62,7 +74,11 @@ class ImageConnection {
       promise.reject(new Error(msg.slice(3, msg.length).toString()));
       return;
     }
-    promise.resolve();
+    if (op === Rsent) {
+      promise.resolve(true);
+    } else {
+      promise.resolve();
+    }
   }
 
   onError(e) {
@@ -74,8 +90,8 @@ class ImageConnection {
       obj.reject("Request ended prematurely due to a closed connection");
       this.requests.delete(tag);
     }
-    if (!this.disconnected) {
-      logger.warn(`Lost connection to ${this.host}, attempting to reconnect in 5 seconds...`);
+    if (!this.disconnected || this.reconnect) {
+      logger.warn(`${this.reconnect ? `${this.host} requested a reconnect` : `Lost connection to ${this.host}`}, attempting to reconnect in 5 seconds...`);
       await setTimeout(5000);
       this.conn = new WebSocket(this.sockurl, {
         headers: {
@@ -86,6 +102,7 @@ class ImageConnection {
       this.conn.once("error", (err) => this.onError(err));
       this.conn.once("close", () => this.onClose());
     }
+    this.reconnect = false;
     this.disconnected = false;
   }
 
@@ -95,6 +112,7 @@ class ImageConnection {
   }
 
   queue(jobid, jobobj) {
+    logger.debug(`Queuing ${jobid} on image server ${this.host}`);
     const str = JSON.stringify(jobobj);
     const buf = Buffer.alloc(8);
     buf.writeBigUint64LE(jobid);
@@ -102,18 +120,21 @@ class ImageConnection {
   }
 
   wait(jobid) {
+    logger.debug(`Waiting for ${jobid} on image server ${this.host}`);
     const buf = Buffer.alloc(8);
     buf.writeBigUint64LE(jobid);
     return this.do(Twait, jobid, buf);
   }
 
   cancel(jobid) {
+    logger.debug(`Cancelling ${jobid} on image server ${this.host}`);
     const buf = Buffer.alloc(8);
     buf.writeBigUint64LE(jobid);
     return this.do(Tcancel, jobid, buf);
   }
 
   async getOutput(jobid) {
+    logger.debug(`Getting output of ${jobid} on image server ${this.host}`);
     const req = await fetch(`${this.httpurl}/image?id=${jobid}`, {
       headers: {
         authentication: this.auth || undefined
@@ -135,7 +156,7 @@ class ImageConnection {
         type = "webp";
         break;
       default:
-        type = contentType;
+        type = contentType ?? "unknown";
         break;
     }
     return { buffer: Buffer.from(await req.arrayBuffer()), type };
@@ -147,8 +168,8 @@ class ImageConnection {
         authentication: this.auth || undefined
       }
     });
-    if (req.statusCode !== 200) return;
-    const res = parseInt(await req.text());
+    if (req.status !== 200) return;
+    const res = Number.parseInt(await req.text());
     return res;
   }
 

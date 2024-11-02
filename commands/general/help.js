@@ -5,10 +5,14 @@ import { random } from "../../utils/misc.js";
 import paginator from "../../utils/pagination/pagination.js";
 import * as help from "../../utils/help.js";
 import Command from "../../classes/command.js";
-const tips = ["You can change the bot's prefix using the prefix command.", "Image commands also work with images previously posted in that channel.", "You can use the tags commands to save things for later use.", "You can visit https://esmbot.net/help.html for a web version of this command list.", "You can view a command's aliases by putting the command name after the help command (e.g. help image).", "Parameters wrapped in [] are required, while parameters wrapped in {} are optional.", "esmBot is hosted and paid for completely out-of-pocket by the main developer. If you want to support development, please consider donating! https://patreon.com/TheEssem"];
+const tips = ["You can change the bot's prefix using the prefix command.", "Image commands also work with images previously posted in that channel.", "You can use the tags commands to save things for later use.", "You can visit https://esmbot.net/help.html for a web version of this command list.", "You can view a command's aliases by putting the command name after the help command (e.g. help image).", "Parameters wrapped in [] are required, while parameters wrapped in {} are optional.", "esmBot is hosted and paid for completely out-of-pocket by the main developer. If you want to support development, please consider leaving a tip! https://ko-fi.com/TheEssem"];
 
 class HelpCommand extends Command {
   async run() {
+    if (!this.permissions.has("EMBED_LINKS")) {
+      this.success = false;
+      return this.getString("permissions.noEmbedLinks");
+    }
     let prefix;
     if (this.guild && database) {
       prefix = (await database.getGuild(this.guild.id)).prefix;
@@ -18,6 +22,7 @@ class HelpCommand extends Command {
     if (this.args.length !== 0 && (collections.commands.has(this.args[0].toLowerCase()) || collections.aliases.has(this.args[0].toLowerCase()))) {
       const command = collections.aliases.get(this.args[0].toLowerCase()) ?? this.args[0].toLowerCase();
       const info = collections.info.get(command);
+      const params = info.params.filter((v) => typeof v === "string");
       const embed = {
         embeds: [{
           author: {
@@ -26,14 +31,14 @@ class HelpCommand extends Command {
           },
           title: `${this.guild ? prefix : ""}${command}`,
           url: "https://esmbot.net/help.html",
-          description: command === "tags" ? "The main tags command. Check the help page for more info: https://esmbot.net/help.html" : info.description,
+          description: info.description,
           color: 16711680,
           fields: [{
             name: "Aliases",
             value: info.aliases.length !== 0 ? info.aliases.join(", ") : "None"
           }, {
             name: "Parameters",
-            value: command === "tags" ? "[name]" : (info.params ? (info.params.length !== 0 ? info.params.join(" ") : "None") : "None"),
+            value: command === "tags" ? "[name]" : (params ? (params.length !== 0 ? params.join(" ") : "None") : "None"),
             inline: true
           }]
         }]
@@ -60,10 +65,6 @@ class HelpCommand extends Command {
       }
       return embed;
     } else {
-      if (this.guild && !this.permissions.has("EMBED_LINKS")) {
-        this.success = false;
-        return "I don't have the `Embed Links` permission!";
-      }
       const pages = [];
       if (help.categories === help.categoryTemplate && !help.generated) help.generateList();
       for (const category of Object.keys(help.categories)) {
@@ -113,7 +114,12 @@ class HelpCommand extends Command {
 
   static description = "Gets a list of commands";
   static aliases = ["commands"];
-  static args = ["{command}"];
+  static flags = [{
+    name: "command",
+    type: 3,
+    description: "A command to view info about",
+    classic: true
+  }];
   static slashAllowed = false;
 }
 

@@ -7,7 +7,11 @@ class PlayCommand extends MusicCommand {
   async run() {
     if (!this.guild) {
       this.success = false;
-      return "This command only works in servers!";
+      return this.getString("guildOnly");
+    }
+    if (!this.permissions.has("EMBED_LINKS")) {
+      this.success = false;
+      return this.getString("permissions.noEmbedLinks");
     }
     const input = this.options.query ?? this.args.join(" ");
     if (!input && (!this.message || this.message?.attachments.size <= 0)) {
@@ -24,10 +28,10 @@ class PlayCommand extends MusicCommand {
     }
     try {
       const url = new URL(query);
-      return play(this.client, url.toString(), { channel: this.channel, guild: this.guild, member: this.member, type: this.type, interaction: this.interaction });
+      return play(this.client, url.toString(), { channel: this.channel, guild: this.guild, member: this.member, type: this.type, interaction: this.interaction, locale: this.locale });
     } catch {
       const search = prefixes.some(v => query.startsWith(v)) ? query : !query && attachment ? attachment.url : (process.env.YT_DISABLED !== "true" ? `ytsearch:${query}` : `dzsearch:${query}`);
-      return play(this.client, search, { channel: this.channel, guild: this.guild, member: this.member, type: this.type, interaction: this.interaction });
+      return play(this.client, search, { channel: this.channel, guild: this.guild, member: this.member, type: this.type, interaction: this.interaction, locale: this.locale });
     }
   }
 
@@ -35,11 +39,11 @@ class PlayCommand extends MusicCommand {
     name: "query",
     type: 3,
     description: "An audio search query or URL",
+    classic: true,
     required: true
   }];
   static description = "Plays a song or adds it to the queue";
   static aliases = ["p"];
-  static args = ["[url]"];
 }
 
 export default PlayCommand;

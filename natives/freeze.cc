@@ -47,18 +47,16 @@ ArgumentMap Freeze(const string& type, string& outType, const char* bufferdata, 
 
     return output;
   } else if (frame >= 0 && !loop) {
-    VOption *options = VImage::option()->set("access", "sequential");
-
     VImage in =
         VImage::new_from_buffer(bufferdata, bufferLength, "",
-                                type == "gif" ? options->set("n", -1) : options)
+                                GetInputOptions(type, true, false))
             .colourspace(VIPS_INTERPRETATION_sRGB);
     if (!in.has_alpha()) in = in.bandjoin(255);
 
     int pageHeight = vips_image_get_page_height(in.get_image());
     int nPages = vips_image_get_n_pages(in.get_image());
-    int framePos = clamp(frame, 0, (int)nPages);
-    VImage out = in.crop(0, 0, in.width(), pageHeight * (framePos + 1));
+    int framePos = clamp(frame, 1, (int)nPages);
+    VImage out = in.crop(0, 0, in.width(), pageHeight * framePos);
     out.set(VIPS_META_PAGE_HEIGHT, pageHeight);
     out.set("loop", 1);
 

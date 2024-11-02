@@ -1,5 +1,5 @@
-import packageJson from "../../package.json" assert { type: "json" };
-import os from "os";
+import packageJson from "../../package.json" with { type: "json" };
+import os from "node:os";
 import Command from "../../classes/command.js";
 import { VERSION } from "oceanic.js";
 const pm2 = process.env.PM2_USAGE ? (await import("pm2")).default : null;
@@ -7,6 +7,10 @@ import { getServers } from "../../utils/misc.js";
 
 class StatsCommand extends Command {
   async run() {
+    if (!this.permissions.has("EMBED_LINKS")) {
+      this.success = false;
+      return this.getString("permissions.noEmbedLinks");
+    }
     const uptime = process.uptime() * 1000;
     const connUptime = this.client.uptime;
     let owner = this.client.users.get(process.env.OWNER.split(",")[0]);

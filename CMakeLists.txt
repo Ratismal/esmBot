@@ -11,6 +11,7 @@ set(SOURCE_FILES natives/blur.cc
   natives/bounce.cc
   natives/caption.cc
   natives/caption2.cc
+  natives/circle.cc
   natives/colors.cc
   natives/commands.h
   natives/common.cc
@@ -36,6 +37,7 @@ set(SOURCE_FILES natives/blur.cc
   natives/snapchat.cc
   natives/sonic.cc
   natives/speed.cc
+  natives/spin.cc
   natives/spotify.cc
   natives/squish.cc
   natives/swirl.cc
@@ -46,13 +48,11 @@ set(SOURCE_FILES natives/blur.cc
   natives/watermark.cc
   natives/whisper.cc)
 
-option(WITH_MAGICK "Build the functions that still depend on ImageMagick" OFF)
+option(WITH_MAGICK "Build with ImageMagick, enables the circle, magik, and spin commands" OFF)
 option(WITH_ZXING "Build with zxing-cpp, enables the qrcreate and qrread commands" ON)
 
 if (WITH_MAGICK)
-  list(APPEND SOURCE_FILES natives/circle.cc
-    natives/magik.cc
-    natives/spin.cc
+  list(APPEND SOURCE_FILES natives/magik.cc
     natives/wall.cc)
 endif()
 
@@ -93,11 +93,9 @@ if (WITH_MAGICK)
 endif()
 
 if (WITH_ZXING)
-  pkg_check_modules(ZXing zxing)
+  find_package(ZXing)
   add_definitions(-DZXING_ENABLED)
-  include_directories(${ZXing_INCLUDE_DIRS})
-  link_directories(${ZXing_LIBRARY_DIRS})
-  target_link_libraries(${PROJECT_NAME} ${ZXing_LDFLAGS})
+  target_link_libraries(${PROJECT_NAME} ZXing::ZXing)
 endif()
 
 find_package(Fontconfig REQUIRED)

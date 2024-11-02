@@ -1,8 +1,9 @@
-import { paths, commands, messageCommands, info, categories, aliases as _aliases } from "./collections.js";
+import { paths, commands, messageCommands, userCommands, info, categories, aliases as _aliases } from "./collections.js";
 import { log } from "./logger.js";
 
-import commandConfig from "../config/commands.json" assert { type: "json" };
+import commandConfig from "../config/commands.json" with { type: "json" };
 import { Constants } from "oceanic.js";
+import { getAllLocalizations } from "./i18n.js";
 
 let queryValue = 0;
 
@@ -10,9 +11,9 @@ let queryValue = 0;
  * Load a command into memory.
  * @param {import("oceanic.js").Client | null} client
  * @param {string} command
- * @param {boolean} slashReload
+ * @param {boolean} skipSend
  */
-export async function load(client, command, slashReload = false) {
+export async function load(client, command, skipSend = false) {
   const { default: props } = await import(`${command}?v=${queryValue}`);
   queryValue++;
   const commandArray = command.split("/");
@@ -24,7 +25,7 @@ export async function load(client, command, slashReload = false) {
     return;
   }
 
-  if (category === "message") {
+  if (category === "message" || category === "user") {
     const nameStringArray = commandName.split("-");
     for (const index of nameStringArray.keys()) {
       nameStringArray[index] = nameStringArray[index].charAt(0).toUpperCase() + nameStringArray[index].slice(1);
@@ -35,14 +36,17 @@ export async function load(client, command, slashReload = false) {
   props.init();
   paths.set(commandName, command);
 
+  const extendedFlags = extendFlags(props.flags, commandName);
+
   const commandInfo = {
     category: category,
     description: props.description,
     aliases: props.aliases,
-    params: props.args,
-    flags: props.flags,
+    params: parseFlags(props.flags),
+    flags: extendedFlags,
     slashAllowed: props.slashAllowed,
     directAllowed: props.directAllowed,
+    userAllowed: props.userAllowed,
     adminOnly: props.adminOnly,
     type: Constants.ApplicationCommandTypes.CHAT_INPUT
   };
@@ -50,11 +54,14 @@ export async function load(client, command, slashReload = false) {
   if (category === "message") {
     messageCommands.set(commandName, props);
     commandInfo.type = Constants.ApplicationCommandTypes.MESSAGE;
+  } else if (category === "user") {
+    userCommands.set(commandName, props);
+    commandInfo.type = Constants.ApplicationCommandTypes.USER;
   } else {
     commands.set(commandName, props);
   }
 
-  if (slashReload && props.slashAllowed) {
+  if (client && props.slashAllowed && !skipSend) {
     await send(client);
   }
 
@@ -72,10 +79,44 @@ export async function load(client, command, slashReload = false) {
   return commandName;
 }
 
+/**
+ * Convert command flags to params
+ * @param {object} flags
+ * @returns {string[] | object[]}
+ */
+function parseFlags(flags) {
+  const params = [];
+  for (const flag of flags) {
+    if (flag.type === 1) {
+      const sub = { name: flag.name, desc: flag.description };
+      if (flag.options) sub.params = parseFlags(flag.options);
+      params.push(sub);
+    } else {
+      if (!flag.classic) continue;
+      params.push(`${flag.required ? "[" : "{"}${flag.name}${flag.required ? "]" : "}"}`);
+    }
+  }
+  return params;
+}
+
+function extendFlags(flags, name) {
+  const outFlags = [];
+  for (const flag of flags) {
+    if (!flag.nameLocalizations) flag.nameLocalizations = getAllLocalizations(`commands.flagNames.${name}.${flag.name}`);
+    if (!flag.descriptionLocalizations) flag.descriptionLocalizations = getAllLocalizations(`commands.flags.${name}.${flag.name}`);
+    if (flag.type === 1 && flag.options) {
+      const nameWithFlag = `${name} ${flag.name}`;
+      extendFlags(flag.options, nameWithFlag);
+    }
+    outFlags.push(flag);
+  }
+  return outFlags;
+}
+
 export function update() {
   const commandArray = [];
   const privateCommandArray = [];
-  const merged = new Map([...commands, ...messageCommands]);
+  const merged = new Map([...commands, ...messageCommands, ...userCommands]);
   for (const [name, command] of merged.entries()) {
     let cmdInfo = info.get(name);
     if (command.postInit) {
@@ -84,28 +125,34 @@ export function update() {
         category: cmdInfo.category,
         description: cmd.description,
         aliases: cmd.aliases,
-        params: cmd.args,
+        params: parseFlags(cmd.flags),
         flags: cmd.flags,
         slashAllowed: cmd.slashAllowed,
         directAllowed: cmd.directAllowed,
+        userAllowed: cmd.userAllowed,
         adminOnly: cmd.adminOnly,
         type: cmdInfo.type
       };
       info.set(name, cmdInfo);
     }
-    if (cmdInfo?.type === Constants.ApplicationCommandTypes.MESSAGE) {
+    if (cmdInfo?.type === Constants.ApplicationCommandTypes.MESSAGE || cmdInfo?.type === Constants.ApplicationCommandTypes.USER) {
       (cmdInfo.adminOnly ? privateCommandArray : commandArray).push({
         name: name,
+        nameLocalizations: getAllLocalizations(`commands.names.${name}`),
         type: cmdInfo.type,
-        dm_permission: cmdInfo.directAllowed
+        integrationTypes: [0, cmdInfo.userAllowed ? 1 : null].filter(v => v !== null),
+        contexts: [0, cmdInfo.directAllowed ? 1 : null, 2].filter(v => v !== null)
       });
     } else if (cmdInfo?.slashAllowed) {
       (cmdInfo.adminOnly ? privateCommandArray : commandArray).push({
         name,
+        nameLocalizations: getAllLocalizations(`commands.names.${name}`),
         type: cmdInfo.type,
         description: cmdInfo.description,
+        descriptionLocalizations: getAllLocalizations(`commands.descriptions.${name}`),
         options: cmdInfo.flags,
-        dm_permission: cmdInfo.directAllowed
+        integrationTypes: [0, cmdInfo.userAllowed ? 1 : null].filter(v => v !== null),
+        contexts: [0, cmdInfo.directAllowed ? 1 : null, 2].filter(v => v !== null)
       });
     }
   }

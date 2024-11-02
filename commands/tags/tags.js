@@ -8,7 +8,8 @@ class TagsCommand extends Command {
   // todo: attempt to not make this file the worst thing that human eyes have ever seen
   async run() {
     this.success = false;
-    if (!this.guild) return "This command only works in servers!";
+    if (!this.guild) return this.getString("guildOnly");
+    if (!this.permissions.has("EMBED_LINKS")) return this.getString("permissions.noEmbedLinks");
     const cmd = this.type === "classic" ? (this.args[0] ?? "").toLowerCase() : this.interaction?.data.options.getSubCommand()?.[0];
     if (!cmd || !cmd.trim()) return "You need to provide the name of the tag you want to view!";
     const tagName = this.type === "classic" ? this.args.slice(1)[0] : this.interaction?.data.options.getString("name");
@@ -28,7 +29,7 @@ class TagsCommand extends Command {
       const getResult = await database.getTag(this.guild.id, tagName);
       if (!getResult) return "This tag doesn't exist!";
       const owners = process.env.OWNER.split(",");
-      if (getResult.author !== this.author.id && !this.member?.permissions.has("MANAGE_MESSAGES") && !owners.includes(this.author.id)) return "You don't own this tag!";
+      if (getResult.author !== this.author.id && !this.memberPermissions.has("MANAGE_MESSAGES") && !owners.includes(this.author.id)) return "You don't own this tag!";
       await database.removeTag(tagName, this.guild);
       this.success = true;
       return `The tag \`${tagName}\` has been deleted!`;
@@ -38,7 +39,7 @@ class TagsCommand extends Command {
       const getResult = await database.getTag(this.guild.id, tagName);
       if (!getResult) return "This tag doesn't exist!";
       const owners = process.env.OWNER.split(",");
-      if (getResult.author !== this.author.id && !this.member?.permissions.has("MANAGE_MESSAGES") && !owners.includes(this.author.id)) return "You don't own this tag!";
+      if (getResult.author !== this.author.id && !this.memberPermissions.has("MANAGE_MESSAGES") && !owners.includes(this.author.id)) return "You don't own this tag!";
       await database.editTag(tagName, { content: this.type === "classic" ? this.args.slice(2).join(" ") : this.interaction?.data.options.getString("content", true), author: this.member?.id }, this.guild);
       this.success = true;
       return `The tag \`${tagName}\` has been edited!`;
@@ -61,7 +62,7 @@ class TagsCommand extends Command {
       }
     }
     if (cmd === "list") {
-      if (!this.permissions.has("EMBED_LINKS")) return "I don't have the `Embed Links` permission!";
+      if (!this.permissions.has("EMBED_LINKS")) return this.getString("permissions.noEmbedLinks");
       const tagList = await database.getTags(this.guild.id);
       const embeds = [];
       const groups = Object.keys(tagList).map((_item, index) => {
@@ -109,48 +110,47 @@ class TagsCommand extends Command {
     return getResult.content;
   }
 
-  static description = "Manage tags";
+  static description = "The main tags command. Check the help page for more info: https://esmbot.net/help.html";
   static aliases = ["t", "tag", "ta"];
-  static args = {
-    default: ["[name]"],
-    add: ["[name]", "[content]"],
-    delete: ["[name]"],
-    edit: ["[name]", "[content]"],
-    owner: ["[name]"]
-  };
 
-  static subArgs = [{
-    name: "name",
-    type: 3,
-    description: "The name of the tag",
-    required: true
-  }, {
-    name: "content",
-    type: 3,
-    description: "The content of the tag",
-    required: true
-  }];
+  static subArgs(needsContent = false) {
+    const args = [{
+      name: "name",
+      type: 3,
+      description: "The name of the tag",
+      required: true,
+      classic: true
+    }];
+    if (needsContent) args.push({
+      name: "content",
+      type: 3,
+      description: "The content of the tag",
+      required: true,
+      classic: true
+    });
+    return args;
+  }
 
   static flags = [{
     name: "add",
     type: 1,
     description: "Adds a new tag",
-    options: this.subArgs
+    options: this.subArgs(true)
   }, {
     name: "delete",
     type: 1,
     description: "Deletes a tag",
-    options: [this.subArgs[0]]
+    options: this.subArgs()
   }, {
     name: "edit",
     type: 1,
     description: "Edits an existing tag",
-    options: this.subArgs
+    options: this.subArgs(true)
   }, {
     name: "get",
     type: 1,
     description: "Gets a tag",
-    options: [this.subArgs[0]]
+    options: this.subArgs()
   }, {
     name: "list",
     type: 1,
@@ -159,13 +159,14 @@ class TagsCommand extends Command {
     name: "owner",
     type: 1,
     description: "Gets the owner of a tag",
-    options: [this.subArgs[0]]
+    options: this.subArgs()
   }, {
     name: "random",
     type: 1,
     description: "Gets a random tag"
   }];
   static directAllowed = false;
+  static userAllowed = false;
   static dbRequired = true;
 }
 

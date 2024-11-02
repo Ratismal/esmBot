@@ -1,4 +1,4 @@
-import emojiRegex from "emoji-regex";
+import emojiRegex from "emoji-regex-xs";
 import Command from "../../classes/command.js";
 
 class EmoteCommand extends Command {
@@ -6,7 +6,7 @@ class EmoteCommand extends Command {
     let emoji = this.options.emoji ?? this.content;
     if (this.type === "classic" && this.message?.messageReference?.channelID && this.message.messageReference.messageID) {
       const replyMessage = await this.client.rest.channels.getMessage(this.message.messageReference.channelID, this.message.messageReference.messageID).catch(() => undefined);
-      if (replyMessage) emoji = replyMessage.content;
+      if (replyMessage) emoji = `${emoji} ${replyMessage.content}`;
     }
     const matches = emoji.matchAll(/<(a?):[\w\d_]+:(\d+)>/g);
     const urls = [];
@@ -29,12 +29,12 @@ class EmoteCommand extends Command {
     name: "emoji",
     type: 3,
     description: "The emoji you want to get",
+    classic: true,
     required: true
   }];
 
   static description = "Gets a raw emote image";
   static aliases = ["e", "em", "hugemoji", "hugeemoji", "emoji"];
-  static args = ["[emote]"];
 }
 
 export default EmoteCommand;

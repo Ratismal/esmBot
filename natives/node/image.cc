@@ -1,6 +1,5 @@
 #include <napi.h>
 
-#include <iostream>
 #include <map>
 #include <string>
 
@@ -53,7 +52,7 @@ Napi::Value ProcessImage(const Napi::CallbackInfo& info) {
         Arguments[property] = val.ToString().As<Napi::String>().Utf8Value();
       } else if (val.IsNumber()) {
         auto num = val.ToNumber();
-        if (isNapiValueInt(env, num) && property != "yscale") { // dumb hack
+        if (isNapiValueInt(env, num) && property != "yscale" && property != "tolerance" && property != "pos") { // dumb hack
           Arguments[property] = num.Int32Value();
         } else {
           Arguments[property] = num.FloatValue();
@@ -69,8 +68,8 @@ Napi::Value ProcessImage(const Napi::CallbackInfo& info) {
     size_t length = 0;
     ArgumentMap outMap;
     if (obj.Has("data")) {
-      Napi::Buffer<char> data = obj.Get("data").As<Napi::Buffer<char>>();
-      outMap = FunctionMap.at(command)(type, outType, data.Data(), data.Length(),
+      Napi::ArrayBuffer data = obj.Get("data").As<Napi::ArrayBuffer>();
+      outMap = FunctionMap.at(command)(type, outType, (char *)data.Data(), data.ByteLength(),
                                     Arguments, length);
     } else {
       outMap = NoInputFunctionMap.at(command)(type, outType, Arguments, length);
@@ -103,6 +102,9 @@ void ImgInit([[maybe_unused]] const Napi::CallbackInfo& info) {
   Magick::InitializeMagick("");
 #endif
   if (vips_init("")) vips_error_exit(NULL);
+#if VIPS_MAJOR_VERSION >= 8 && VIPS_MINOR_VERSION >= 13
+  vips_block_untrusted_set(true);
+#endif
   return;
 }
 

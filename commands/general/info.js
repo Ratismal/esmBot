@@ -1,9 +1,13 @@
-import packageJson from "../../package.json" assert { type: "json" };
+import packageJson from "../../package.json" with { type: "json" };
 import Command from "../../classes/command.js";
 import { getServers } from "../../utils/misc.js";
 
 class InfoCommand extends Command {
   async run() {
+    if (!this.permissions.has("EMBED_LINKS")) {
+      this.success = false;
+      return this.getString("permissions.noEmbedLinks");
+    }
     let owner = this.client.users.get(process.env.OWNER.split(",")[0]);
     if (!owner) owner = await this.client.rest.users.get(process.env.OWNER.split(",")[0]);
     const servers = await getServers(this.client);
@@ -42,7 +46,13 @@ class InfoCommand extends Command {
         },
         {
           name: "🐘 Mastodon:",
-          value: "[Click here!](https://wetdry.world/@esmBot)"
+          value: "[Click here!](https://wetdry.world/@esmBot)",
+          inline: true
+        },
+        {
+          name: "🦋 Bluesky:",
+          value: "[Click here!](https://bsky.app/profile/esmbot.net)",
+          inline: true
         }
         ]
       }]

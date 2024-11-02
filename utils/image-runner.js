@@ -1,14 +1,7 @@
-import { createRequire } from "module";
-import { isMainThread, parentPort, workerData } from "worker_threads";
-import * as http from "http";
-import * as https from "https";
-import path from "path";
-import { fileURLToPath } from "url";
-
-const nodeRequire = createRequire(import.meta.url);
-
-const relPath = `../build/${process.env.DEBUG && process.env.DEBUG === "true" ? "Debug" : "Release"}/image.node`;
-const img = nodeRequire(relPath);
+import { isMainThread, parentPort, workerData } from "node:worker_threads";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { img } from "./imageLib.js";
 
 const enumMap = {
   forget: 0,
@@ -37,27 +30,23 @@ export default function run(object) {
         buffer: Buffer.alloc(0),
         fileExtension: "nogif"
       });
-      promise = new Promise((res, rej) => {
-        const req = (object.path.startsWith("https") ? https.request : http.request)(object.path);
-        req.once("response", (resp) => {
-          if (resp.statusCode === 429) {
-            req.end();
-            return resolve({
-              buffer: Buffer.alloc(0),
-              fileExtension: "ratelimit"
-            });
-          }
-          const buffers = [];
-          resp.on("data", (chunk) => {
-            buffers.push(chunk);
-          });
-          resp.once("end", () => {
-            res(Buffer.concat(buffers));
-          });
-          resp.once("error", rej);
+      const controller = new AbortController();
+      const timeout = setTimeout(() => {
+        controller.abort();
+      }, 15000);
+      promise = fetch(object.path, {
+        signal: controller.signal
+      }).then(res => {
+        clearTimeout(timeout);
+        if (res.status === 429) throw "ratelimit";
+        return res.arrayBuffer();
+      }).catch(e => {
+        if (typeof e !== "string") reject(e);
+        resolve({
+          buffer: Buffer.alloc(0),
+          fileExtension: e
         });
-        req.once("error", rej);
-        req.end();
+        return "exit";
       });
     }
     // Convert from a MIME type (e.g. "image/png") to something the image processor understands (e.g. "png").
@@ -66,11 +55,10 @@ export default function run(object) {
     const fileExtension = object.params.type ? object.params.type.split("/")[1] : "png";
     promise.then(buf => {
       if (buf) object.params.data = buf;
+      if (buf === "exit") return;
       const objectWithFixedType = Object.assign({}, object.params, { type: fileExtension });
-      if (objectWithFixedType.gravity) {
-        if (Number.isNaN(parseInt(objectWithFixedType.gravity))) {
-          objectWithFixedType.gravity = enumMap[objectWithFixedType.gravity];
-        }
+      if (objectWithFixedType.gravity && Number.isNaN(Number.parseInt(objectWithFixedType.gravity))) {
+        objectWithFixedType.gravity = enumMap[objectWithFixedType.gravity];
       }
       objectWithFixedType.basePath = path.join(path.dirname(fileURLToPath(import.meta.url)), "../");
       try {
@@ -90,7 +78,7 @@ export default function run(object) {
 if (!isMainThread) {
   run(workerData)
     .then(returnObject => {
-      parentPort.postMessage(returnObject);
+      parentPort.postMessage(returnObject, [returnObject.buffer.buffer]);
     })
     .catch(err => {
       // turn promise rejection into normal error

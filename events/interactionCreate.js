@@ -1,11 +1,18 @@
 import database from "../utils/database.js";
 import logger from "../utils/logger.js";
-import { commands, messageCommands } from "../utils/collections.js";
+import { collectors, commands, messageCommands, userCommands } from "../utils/collections.js";
 import { clean } from "../utils/misc.js";
 import { upload } from "../utils/tempimages.js";
+import { InteractionTypes } from "oceanic.js";
+import { getString } from "../utils/i18n.js";
+
+let Sentry;
+if (process.env.SENTRY_DSN && process.env.SENTRY_DSN !== "") {
+  Sentry = await import("@sentry/node");
+}
 
 /**
- * Runs when a slash/ command is executed.
+ * Runs when a slash command/interaction is executed.
  * @param {import("oceanic.js").Client} client
  * @param {import("oceanic.js").AnyInteractionGateway} interaction
  */
@@ -13,18 +20,31 @@ export default async (client, interaction) => {
   // block if client is not ready yet
   if (!client.ready) return;
 
-  // block non-command events
-  if (interaction?.type !== 2) return;
+  // handle incoming non-command interactions
+  if (interaction.type === InteractionTypes.MESSAGE_COMPONENT) {
+    //await interaction.deferUpdate();
+    const collector = collectors.get(interaction.message.id);
+    if (collector) collector.emit("interaction", interaction);
+    return;
+  }
+
+  // block other non-command events
+  if (interaction.type !== InteractionTypes.APPLICATION_COMMAND) return;
 
   // check if command exists and if it's enabled
   const command = interaction.data.name;
-  let cmd = commands.get(command);
-  if (!cmd) {
-    cmd = messageCommands.get(command);
-    if (!cmd) return;
+  const cmd = commands.get(command) ?? messageCommands.get(command) ?? userCommands.get(command);
+  if (!cmd) return;
+
+  try {
+    await interaction.defer((cmd.ephemeral || interaction.data.options.getBoolean("ephemeral", false)) ? 64 : undefined);
+  } catch (e) {
+    logger.warn(`Could not defer interaction, cannot continue further: ${e}`);
+    return;
   }
+
   if (cmd.dbRequired && !database) {
-    await interaction.createMessage({ content: "This command is unavailable on stateless instances of esmBot.", flags: 64 });
+    await interaction.createFollowup({ content: getString("noDatabase", interaction.locale), flags: 64 });
     return;
   }
 
@@ -33,10 +53,9 @@ export default async (client, interaction) => {
   // actually run the command
   logger.log("main", `${invoker.username} (${invoker.id}) ran application command ${command}`);
   try {
-    // eslint-disable-next-line no-unused-vars
     const commandClass = new cmd(client, { type: "application", interaction });
     const result = await commandClass.run();
-    const replyMethod = interaction.acknowledged ? (commandClass.edit ? "editOriginal" : "createFollowup") : "createMessage";
+    const replyMethod = commandClass.edit ? "editOriginal" : "createFollowup";
     if (typeof result === "string") {
       await interaction[replyMethod]({
         content: result,
@@ -46,16 +65,19 @@ export default async (client, interaction) => {
       if (result.contents && result.name) {
         const fileSize = 26214400;
         if (result.contents.length > fileSize) {
-          if (process.env.TEMPDIR && process.env.TEMPDIR !== "") {
-            await upload(client, result, interaction, true);
+          if (process.env.TEMPDIR && process.env.TEMPDIR !== "" && interaction.appPermissions.has("EMBED_LINKS")) {
+            await upload(client, result, interaction, commandClass.success, true);
           } else {
             await interaction[replyMethod]({
-              content: "The resulting image was more than 25MB in size, so I can't upload it.",
+              content: getString("image.noTempServer", interaction.locale),
               flags: 64
             });
           }
         } else {
-          await interaction[replyMethod](result.text ? result.text : { files: [result] });
+          await interaction[replyMethod]({
+            flags: result.flags ?? (commandClass.success ? 0 : 64),
+            files: [result]
+          });
         }
       } else {
         await interaction[replyMethod](Object.assign({
@@ -63,26 +85,31 @@ export default async (client, interaction) => {
         }, result));
       }
     } else {
-      logger.warn(`Unknown return type for command ${command}: ${result} (${typeof result})`);
+      logger.debug(`Unknown return type for command ${command}: ${result} (${typeof result})`);
       if (!result) return;
       await interaction[replyMethod](Object.assign({
         flags: commandClass.success ? 0 : 64
       }, result));
     }
   } catch (error) {
-    const replyMethod = interaction.acknowledged ? "createFollowup" : "createMessage";
+    if (process.env.SENTRY_DSN && process.env.SENTRY_DSN !== "") Sentry.captureException(error, {
+      tags: {
+        process: process.env.pm_id ? Number.parseInt(process.env.pm_id) - 1 : 0,
+        command,
+        args: JSON.stringify(interaction.data.options.raw)
+      }
+    });
     if (error.toString().includes("Request entity too large")) {
-      await interaction[replyMethod]({ content: "The resulting file was too large to upload. Try again with a smaller image if possible.", flags: 64 });
+      await interaction.createFollowup({ content: getString("image.tooLarge", interaction.locale), flags: 64 });
     } else if (error.toString().includes("Job ended prematurely")) {
-      await interaction[replyMethod]({ content: "Something happened to the image servers before I could receive the image. Try running your command again.", flags: 64 });
+      await interaction.createFollowup({ content: getString("image.jobEnded", interaction.locale), flags: 64 });
     } else {
       logger.error(`Error occurred with application command ${command} with arguments ${JSON.stringify(interaction.data.options.raw)}: ${error.stack || error}`);
       try {
         let err = error;
         if (error?.constructor?.name === "Promise") err = await error;
-        if (!interaction.acknowledged) await interaction.defer(); // Files can't be uploaded without deferring first
-        await interaction[replyMethod]({
-          content: "Uh oh! I ran into an error while running this command. Please report the content of the attached file at the following link or on the esmBot Support server: <https://github.com/esmBot/esmBot/issues>",
+        await interaction.createFollowup({
+          content: `${getString("error", interaction.locale)} <https://github.com/esmBot/esmBot/issues>`,
           files: [{
             contents: Buffer.from(`Message: ${clean(err)}\n\nStack Trace: ${clean(err.stack)}`),
             name: "error.txt"

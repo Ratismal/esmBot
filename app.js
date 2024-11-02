@@ -1,7 +1,8 @@
-if (parseInt(process.versions.node.split(".")[0]) < 18) {
+const [ major, minor ] = process.versions.node.split(".").map(Number);
+if (major < 20 || (major === 20 && minor < 12)) {
   console.error(`You are currently running Node.js version ${process.version}.
-esmBot requires Node.js version 18 or above.
-Please refer to step 3 of the setup guide: https://docs.esmbot.net/setup/#3-install-nodejs`);
+esmBot requires Node.js version 20.12.0 or above.
+Please refer to step 2 of the setup guide: https://docs.esmbot.net/setup/#2-install-nodejs`);
   process.exit(1);
 }
 if (process.platform === "win32") {
@@ -14,22 +15,36 @@ esmBot will continue to run past this message in 5 seconds, but keep in mind tha
 // load config from .env file
 import "dotenv/config";
 
-import { reloadImageConnections } from "./utils/image.js";
+if (process.env.SENTRY_DSN && process.env.SENTRY_DSN !== "") await import("./utils/sentry.js");
+
+if (!process.env.TOKEN) {
+  console.error(`No token was provided!
+esmBot requires a valid Discord bot token to function. Generate a new token from the "Bot" tab in your Discord application settings and paste it into your .env file.`);
+  process.exit(1);
+}
+
+if (process.env.TOKEN.length < 59) {
+  console.error(`Incorrect bot token length!
+You may have accidentally copied the OAuth2 client secret. Try generating a new token from the "Bot" tab in your Discord application settings.`);
+  process.exit(1);
+}
+
+import { reloadImageConnections, initImageLib } from "./utils/image.js";
 
 // main services
 import { Client, Constants } from "oceanic.js";
 // some utils
-import { promises } from "fs";
+import { promises } from "node:fs";
 import logger from "./utils/logger.js";
-import { exec as baseExec } from "child_process";
-import { promisify } from "util";
-import { resolve, dirname } from "path";
-import { fileURLToPath } from "url";
+import { exec as baseExec } from "node:child_process";
+import { promisify } from "node:util";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 const exec = promisify(baseExec);
 // initialize command loader
 import { load } from "./utils/handler.js";
 // command collections
-import { paths } from "./utils/collections.js";
+import { locales, paths } from "./utils/collections.js";
 // database stuff
 import database from "./utils/database.js";
 // lavalink stuff
@@ -38,8 +53,8 @@ import { reload, connect, connected } from "./utils/soundplayer.js";
 import { endBroadcast, startBroadcast } from "./utils/misc.js";
 import { parseThreshold } from "./utils/tempimages.js";
 
-import commandConfig from "./config/commands.json" assert { type: "json" };
-import packageJson from "./package.json" assert { type: "json" };
+import commandConfig from "./config/commands.json" with { type: "json" };
+import packageJson from "./package.json" with { type: "json" };
 process.env.ESMBOT_VER = packageJson.version;
 
 const intents = [
@@ -54,15 +69,16 @@ if (commandConfig.types.classic) {
 
 /**
  * @param {string} dir
+ * @param {string} ext
  * @returns {AsyncGenerator<string>}
  */
-async function* getFiles(dir) {
+async function* getFiles(dir, ext = ".js") {
   const dirents = await promises.readdir(dir, { withFileTypes: true });
   for (const dirent of dirents) {
     const name = dir + (dir.charAt(dir.length - 1) !== "/" ? "/" : "") + dirent.name;
     if (dirent.isDirectory()) {
-      yield* getFiles(name);
-    } else if (dirent.name.endsWith(".js")) {
+      yield* getFiles(name, ext);
+    } else if (dirent.name.endsWith(ext)) {
       yield name;
     }
   }
@@ -109,6 +125,21 @@ if (process.env.TEMPDIR && process.env.THRESHOLD) {
   await parseThreshold();
 }
 
+// register locales
+logger.log("info", "Attempting to load locale data...");
+for await (const localeFile of getFiles(resolve(dirname(fileURLToPath(import.meta.url)), "./locales/"), ".json")) {
+  logger.log("main", `Loading locales from ${localeFile}...`);
+  try {
+    const commandArray = localeFile.split("/");
+    const localeName = commandArray[commandArray.length - 1].split(".")[0];
+    const data = await promises.readFile(localeFile, { encoding: "utf8" });
+    locales.set(localeName, JSON.parse(data));
+  } catch (e) {
+    logger.error(`Failed to register locales from ${localeFile}: ${e}`);
+  }
+}
+logger.log("info", "Finished loading locale data.");
+
 // register commands and their info
 logger.log("info", "Attempting to load commands...");
 for await (const commandFile of getFiles(resolve(dirname(fileURLToPath(import.meta.url)), "./commands/"))) {
@@ -125,8 +156,9 @@ if (database) {
   await database.setup();
 }
 if (process.env.API_TYPE === "ws") await reloadImageConnections();
+else initImageLib();
 
-const shardArray = process.env.SHARDS && process.env.pm_id ? JSON.parse(process.env.SHARDS)[parseInt(process.env.pm_id) - 1] : null;
+const shardArray = process.env.SHARDS && process.env.pm_id ? JSON.parse(process.env.SHARDS)[Number.parseInt(process.env.pm_id) - 1] : null;
 
 // create the oceanic client
 const client = new Client({
@@ -150,9 +182,14 @@ const client = new Client({
     },
     intents
   },
+  rest: {
+    baseURL: process.env.REST_PROXY && process.env.REST_PROXY !== "" ? process.env.REST_PROXY : undefined
+  },
   collectionLimits: {
     messages: 50,
-    channels: !commandConfig.types.classic ? 0 : Infinity
+    channels: !commandConfig.types.classic ? 0 : Number.POSITIVE_INFINITY,
+    guildThreads: !commandConfig.types.classic ? 0 : Number.POSITIVE_INFINITY,
+    emojis: 0
   }
 });
 
@@ -185,7 +222,7 @@ if (process.env.PM2_USAGE) {
         logger.error(err);
         return;
       }
-      const managerProc = list.filter((v) => v.name === "esmBot-manager")[0];
+      const managerProc = list.find((v) => v.name === "esmBot-manager");
       pm2Bus.on("process:msg", async (packet) => {
         switch (packet.data?.type) {
           case "reload":
@@ -212,7 +249,7 @@ if (process.env.PM2_USAGE) {
                 guilds: client.guilds.size,
                 shards: client.shards.map((v) => {
                   if (!process.env.pm_id) return;
-                  return { id: v.id, procId: parseInt(process.env.pm_id) - 1, latency: v.latency, status: v.status };
+                  return { id: v.id, procId: Number.parseInt(process.env.pm_id) - 1, latency: v.latency, status: v.status };
                 })
               },
               topic: true
@@ -231,6 +268,7 @@ if (!connected) connect(client);
 
 try {
   await client.connect();
+
 } catch (e) {
   logger.error("esmBot failed to connect to Discord!");
   logger.error(e);

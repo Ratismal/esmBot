@@ -12,15 +12,17 @@ ArgumentMap Mirror(const string& type, string& outType, const char* bufferdata, 
 
   VImage in = VImage::new_from_buffer(
                   bufferdata, bufferLength, "",
-                  type == "gif" ? VImage::option()->set("n", -1) : 0)
+                  GetInputOptions(type, false, false))
                   .colourspace(VIPS_INTERPRETATION_sRGB);
   if (!in.has_alpha()) in = in.bandjoin(255);
+
+  int nPages = vips_image_get_n_pages(in.get_image());
 
   VImage out;
 
   if (vertical) {
-    if (type == "gif") {
-      // once again, libvips gif handling is both a blessing and a curse
+    if (nPages > 1) {
+      // once again, libvips animation handling is both a blessing and a curse
       vector<VImage> img;
       int pageHeight = vips_image_get_page_height(in.get_image());
       int nPages = vips_image_get_n_pages(in.get_image());
