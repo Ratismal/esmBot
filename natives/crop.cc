@@ -9,22 +9,20 @@ using namespace vips;
 
 ArgumentMap Crop(const string& type, string& outType, const char* bufferdata, size_t bufferLength, [[maybe_unused]] ArgumentMap arguments, size_t& dataSize)
 {
-  VOption *options = VImage::option()->set("access", "sequential");
-
   VImage in =
       VImage::new_from_buffer(bufferdata, bufferLength, "",
-                              type == "gif" ? options->set("n", -1) : options)
+                              GetInputOptions(type, true, false))
           .colourspace(VIPS_INTERPRETATION_sRGB);
 
   int width = in.width();
   int pageHeight = vips_image_get_page_height(in.get_image());
-  int nPages = vips_image_get_n_pages(in.get_image());
+  int nPages = type == "avif" ? 1 : vips_image_get_n_pages(in.get_image());
 
   vector<VImage> img;
   int finalHeight = 0;
   for (int i = 0; i < nPages; i++) {
     VImage img_frame =
-        type == "gif" ? in.crop(0, i * pageHeight, width, pageHeight) : in;
+        nPages > 1 ? in.crop(0, i * pageHeight, width, pageHeight) : in;
     int frameWidth = img_frame.width();
     int frameHeight = img_frame.height();
     bool widthOrHeight = frameWidth / frameHeight >= 1;

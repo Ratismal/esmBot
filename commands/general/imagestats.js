@@ -3,6 +3,10 @@ import { connections } from "../../utils/image.js";
 
 class ImageStatsCommand extends Command {
   async run() {
+    if (!this.permissions.has("EMBED_LINKS")) {
+      this.success = false;
+      return this.getString("permissions.noEmbedLinks");
+    }
     await this.acknowledge();
     const embed = {
       embeds: [{
@@ -18,9 +22,8 @@ class ImageStatsCommand extends Command {
     let i = 0;
     for (const connection of connections.values()) {
       const count = await connection.getCount();
-      if (!count) continue;
       embed.embeds[0].fields.push({
-        name: `Server ${i++}`,
+        name: `Server ${i++}${connection.name ? ` (${connection.name})` : ""}`,
         value: `Running Jobs: ${count}`
       });
     }

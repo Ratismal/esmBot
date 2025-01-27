@@ -7,14 +7,14 @@ class BroadcastCommand extends Command {
     const owners = process.env.OWNER.split(",");
     if (!owners.includes(this.author.id)) {
       this.success = false;
-      return "Only the bot owner can broadcast messages!";
+      return this.getString("commands.responses.broadcast.owner");
     }
     const message = this.options.message ?? this.args.join(" ");
     if (message?.trim()) {
       await database.setBroadcast(message);
       startBroadcast(this.client, message);
       if (process.env.PM2_USAGE) {
-        process.send({
+        process.send?.({
           type: "process:msg",
           data: {
             type: "broadcastStart",
@@ -22,19 +22,19 @@ class BroadcastCommand extends Command {
           }
         });
       }
-      return "Started broadcast.";
+      return this.getString("commands.responses.broadcast.started");
     } else {
       await database.setBroadcast(null);
       endBroadcast(this.client);
       if (process.env.PM2_USAGE) {
-        process.send({
+        process.send?.({
           type: "process:msg",
           data: {
             type: "broadcastEnd"
           }
         });
       }
-      return "Ended broadcast.";
+      return this.getString("commands.responses.broadcast.ended");
     }
   }
 

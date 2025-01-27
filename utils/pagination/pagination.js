@@ -1,15 +1,19 @@
 import InteractionCollector from "./awaitinteractions.js";
+import { collectors } from "../collections.js";
+import logger from "../logger.js";
+import { getString } from "../i18n.js";
 
 /**
  * @param {import("oceanic.js").Client} client
- * @param {{ type: string; message: import("oceanic.js").Message; interaction: import("oceanic.js").CommandInteraction; author: import("oceanic.js").User | import("oceanic.js").Member; }} info
+ * @param {{ type: "classic" | "application"; message: import("oceanic.js").Message; interaction: import("oceanic.js").CommandInteraction; author: import("oceanic.js").User | import("oceanic.js").Member; }} info
+ * @param {{ embeds: import("oceanic.js").EmbedOptions[]; }[]} pages
  */
-export default async (client, info, pages, timeout = 120000) => {
+export default async (client, info, pages) => {
   const options = info.type === "classic" ? {
     messageReference: {
       channelID: info.message.channelID,
       messageID: info.message.id,
-      guildID: info.message.guildID,
+      guildID: info.message.guildID ?? undefined,
       failIfNotExists: false
     },
     allowedMentions: {
@@ -23,7 +27,7 @@ export default async (client, info, pages, timeout = 120000) => {
       components: [
         {
           type: 2,
-          label: "Back",
+          label: getString("pagination.back", info.type === "application" ? info.interaction.locale : undefined),
           emoji: {
             id: null,
             name: "◀"
@@ -33,7 +37,7 @@ export default async (client, info, pages, timeout = 120000) => {
         },
         {
           type: 2,
-          label: "Forward",
+          label: getString("pagination.forward", info.type === "application" ? info.interaction.locale : undefined),
           emoji: {
             id: null,
             name: "▶"
@@ -43,7 +47,7 @@ export default async (client, info, pages, timeout = 120000) => {
         },
         {
           type: 2,
-          label: "Jump",
+          label: getString("pagination.jump", info.type === "application" ? info.interaction.locale : undefined),
           emoji: {
             id: null,
             name: "🔢"
@@ -53,7 +57,7 @@ export default async (client, info, pages, timeout = 120000) => {
         },
         {
           type: 2,
-          label: "Delete",
+          label: getString("pagination.delete", info.type === "application" ? info.interaction.locale : undefined),
           emoji: {
             id: null,
             name: "🗑"
@@ -68,35 +72,50 @@ export default async (client, info, pages, timeout = 120000) => {
   if (info.type === "classic") {
     currentPage = await client.rest.channels.createMessage(info.message.channelID, Object.assign(pages[page], options, pages.length > 1 ? components : {}));
   } else {
-    const response = await info.interaction[info.interaction.acknowledged ? "createFollowup" : "createMessage"](Object.assign(pages[page], pages.length > 1 ? components : {}));
+    const response = await info.interaction.createFollowup(Object.assign(pages[page], pages.length > 1 ? components : {}));
     currentPage = await response.getMessage();
     if (!currentPage) currentPage = await info.interaction.getOriginal();
   }
   
   if (pages.length > 1) {
-    const interactionCollector = new InteractionCollector(client, currentPage, timeout);
+    const interactionCollector = new InteractionCollector(client, currentPage);
     interactionCollector.on("interaction", async (interaction) => {
+      try {
+        await interaction.deferUpdate();
+      } catch (e) {
+        logger.warn(`Could not defer update, cannot continue further with pagination: ${e}`);
+        return;
+      }
       if ((interaction.member ?? interaction.user).id === info.author.id) {
         switch (interaction.data.customID) {
           case "back":
-            await interaction.deferUpdate();
             page = page > 0 ? --page : pages.length - 1;
-            currentPage = await currentPage.edit(Object.assign(pages[page], options));
+            if (info.type === "application") {
+              currentPage = await info.interaction.editOriginal(Object.assign(pages[page], options));
+            } else {
+              currentPage = await currentPage.edit(Object.assign(pages[page], options));
+            }
             interactionCollector.extend();
             break;
           case "forward":
-            await interaction.deferUpdate();
             page = page + 1 < pages.length ? ++page : 0;
-            currentPage = await currentPage.edit(Object.assign(pages[page], options));
+            if (info.type === "application") {
+              currentPage = await info.interaction.editOriginal(Object.assign(pages[page], options));
+            } else {
+              currentPage = await currentPage.edit(Object.assign(pages[page], options));
+            }
             interactionCollector.extend();
             break;
           case "jump": {
-            await interaction.deferUpdate();
             const newComponents = JSON.parse(JSON.stringify(components));
             for (const index of newComponents.components[0].components.keys()) {
               newComponents.components[0].components[index].disabled = true;
             }
-            currentPage = await currentPage.edit(newComponents);
+            if (info.type === "application") {
+              currentPage = await info.interaction.editOriginal(newComponents);
+            } else {
+              currentPage = await currentPage.edit(newComponents);
+            }
             interactionCollector.extend();
             const jumpComponents = {
               components: [{
@@ -104,7 +123,7 @@ export default async (client, info, pages, timeout = 120000) => {
                 components: [{
                   type: 3,
                   customID: "seekDropdown",
-                  placeholder: "Page Number",
+                  placeholder: getString("pagination.pageNumber", interaction.locale),
                   options: []
                 }]
               }]
@@ -116,56 +135,51 @@ export default async (client, info, pages, timeout = 120000) => {
               };
               jumpComponents.components[0].components[0].options[i] = payload;
             }
-            let promise;
-            if (info.type === "classic") {
-              promise = client.rest.channels.createMessage(info.message.channelID, Object.assign({ content: "What page do you want to jump to?" }, {
-                messageReference: {
-                  channelID: currentPage.channelID,
-                  messageID: currentPage.id,
-                  guildID: currentPage.guildID,
-                  failIfNotExists: false
-                },
-                allowedMentions: {
-                  repliedUser: false
-                }
-              }, jumpComponents));
-            } else {
-              promise = (await info.interaction.createFollowup(Object.assign({ content: "What page do you want to jump to?" }, jumpComponents))).getMessage();
-            }
-            promise.then(askMessage => {
-              const dropdownCollector = new InteractionCollector(client, askMessage, timeout);
-              let ended = false;
-              dropdownCollector.on("interaction", async (response) => {
-                if (response.data.customID !== "seekDropdown") return;
-                try {
-                  await askMessage.delete();
-                } catch {
-                  // no-op
-                }
-                page = Number(response.data.values.raw[0]);
+            const followup = await interaction.createFollowup(Object.assign({ content: getString("pagination.jumpTo", interaction.locale), flags: 64 }, jumpComponents));
+            const askMessage = await followup.getMessage();
+            const dropdownCollector = new InteractionCollector(client, askMessage);
+            let ended = false;
+            dropdownCollector.on("interaction", async (response) => {
+              if (response.data.customID !== "seekDropdown") return;
+              try {
+                await interaction.deleteFollowup(askMessage.id);
+              } catch {
+                // no-op
+              }
+              page = Number(response.data.values.raw[0]);
+              if (info.type === "application") {
+                currentPage = await info.interaction.editOriginal(Object.assign(pages[page], options, components));
+              } else {
                 currentPage = await currentPage.edit(Object.assign(pages[page], options, components));
-                ended = true;
-                dropdownCollector.stop();
-              });
-              dropdownCollector.once("end", async () => {
-                if (ended) return;
-                try {
-                  await askMessage.delete();
-                } catch {
-                  // no-op
-                }
-                currentPage = await currentPage.edit(Object.assign(pages[page], options, components));
-              });
-            }).catch(error => {
-              throw error;
+              }
+              ended = true;
+              dropdownCollector.stop();
             });
+            dropdownCollector.once("end", async () => {
+              collectors.delete(askMessage.id);
+              if (ended) return;
+              try {
+                await interaction.deleteFollowup(askMessage.id);
+              } catch {
+                // no-op
+              }
+              if (info.type === "application") {
+                currentPage = await info.interaction.editOriginal(Object.assign(pages[page], options, components));
+              } else {
+                currentPage = await currentPage.edit(Object.assign(pages[page], options, components));
+              }
+            });
+            collectors.set(askMessage.id, dropdownCollector);
             break;
           }
           case "delete":
-            await interaction.deferUpdate();
             interactionCollector.emit("end", true);
             try {
-              await currentPage.delete();
+              if (info.type === "application") {
+                await info.interaction.deleteOriginal();
+              } else {
+                await currentPage.delete();
+              }
             } catch {
               // no-op
             }
@@ -173,20 +187,31 @@ export default async (client, info, pages, timeout = 120000) => {
           default:
             break;
         }
+      } else {
+        await interaction.createFollowup({
+          content: getString("pagination.cantChangePage", interaction.locale),
+          flags: 64
+        });
       }
     });
     interactionCollector.once("end", async (deleted = false) => {
+      collectors.delete(currentPage.id);
       interactionCollector.removeAllListeners("interaction");
       if (!deleted) {
         for (const index of components.components[0].components.keys()) {
           components.components[0].components[index].disabled = true;
         }
         try {
-          await currentPage.edit(components);
+          if (info.type === "application") {
+            await info.interaction.editOriginal(components);
+          } else {
+            await currentPage.edit(components);
+          }
         } catch {
           // no-op
         }
       }
     });
+    collectors.set(currentPage.id, interactionCollector);
   }
 };

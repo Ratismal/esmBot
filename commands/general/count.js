@@ -1,12 +1,20 @@
 import paginator from "../../utils/pagination/pagination.js";
+import * as collections from "../../utils/collections.js";
 import database from "../../utils/database.js";
 import Command from "../../classes/command.js";
 
 class CountCommand extends Command {
   async run() {
-    if (this.guild && !this.permissions.has("EMBED_LINKS")) {
+    const cmd = (this.interaction?.data.options.getString("command") ?? this.args.join(" ")).trim();
+    const merged = new Map([...collections.commands, ...collections.messageCommands, ...collections.userCommands]);
+    if (cmd && (merged.has(cmd) || collections.aliases.has(cmd))) {
+      const command = collections.aliases.get(cmd) ?? cmd;
+      const counts = await database.getCounts();
+      return `The command \`${command}\` has been run a total of ${counts[command]} times.`;
+    }
+    if (!this.permissions.has("EMBED_LINKS")) {
       this.success = false;
-      return "I don't have the `Embed Links` permission!";
+      return this.getString("permissions.noEmbedLinks");
     }
     const counts = await database.getCounts();
     const countArray = [];
@@ -46,8 +54,13 @@ class CountCommand extends Command {
   }
 
   static description = "Gets how many times every command was used";
-  static args = ["{mention/id}"];
   static aliases = ["counts"];
+  static flags = [{
+    name: "command",
+    type: 3,
+    description: "A specific command to view counts for",
+    classic: true
+  }];
   static dbRequired = true;
 }
 

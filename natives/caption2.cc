@@ -14,11 +14,9 @@ ArgumentMap CaptionTwo(const string& type, string& outType, const char* bufferda
   string font = GetArgument<string>(arguments, "font");
   string basePath = GetArgument<string>(arguments, "basePath");
 
-  VOption *options = VImage::option()->set("access", "sequential");
-
   VImage in =
       VImage::new_from_buffer(bufferdata, bufferLength, "",
-                              type == "gif" ? options->set("n", -1) : options)
+                              GetInputOptions(type, true, false))
           .colourspace(VIPS_INTERPRETATION_sRGB);
 
   if (!in.has_alpha()) in = in.bandjoin(255);
@@ -26,7 +24,7 @@ ArgumentMap CaptionTwo(const string& type, string& outType, const char* bufferda
   int width = in.width();
   int size = width / 13;
   int pageHeight = vips_image_get_page_height(in.get_image());
-  int nPages = vips_image_get_n_pages(in.get_image());
+  int nPages = type == "avif" ? 1 : vips_image_get_n_pages(in.get_image());
   int textWidth = width - ((width / 25) * 2);
 
   string font_string =
@@ -55,7 +53,7 @@ ArgumentMap CaptionTwo(const string& type, string& outType, const char* bufferda
   vector<VImage> img;
   for (int i = 0; i < nPages; i++) {
     VImage img_frame =
-        type == "gif" ? in.crop(0, i * pageHeight, width, pageHeight) : in;
+        nPages > 1 ? in.crop(0, i * pageHeight, width, pageHeight) : in;
     VImage frame =
         (top ? captionImage : img_frame)
             .join(top ? img_frame : captionImage, VIPS_DIRECTION_VERTICAL,

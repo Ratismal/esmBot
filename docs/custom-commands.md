@@ -20,7 +20,7 @@ commands/
 As you can see, each command is grouped into categories, which are represented by subdirectories. To create a new category, you can simply create a new directory inside of the `commands` directory, and to create a new command, you can create a new JS file under one of those subdirectories.
 
 !!! tip
-    The `message` category is special; commands in here act as right-click context menu message commands instead of "classic" or slash commands.
+    The `message` and `user` categories are special; instead of being registered as classic or slash commands, commands in these categories are registered as right-click context menu commands. Commands in the `message` category show when selecting messages, while commands in the `user` category show when selecting users.
 
 ## Command Structure
 It's recommended to use the `Command` class located in `classes/command.js` to create a new command in most cases. This class provides various parameters and fields that will likely be useful when creating a command. Here is a simple example of a working command file:
@@ -52,6 +52,9 @@ The parameters available to your command consist of the following:
 - `this.author`: An Oceanic [`User`](https://docs.oceanic.ws/latest/classes/User.User.html) object of the user who ran the command.
 - `this.member`: An Oceanic [`Member`](https://docs.oceanic.ws/latest/classes/Member.Member.html) object of the server member who ran the command. When running the command outside of a server, this parameter is undefined.
 - `this.permissions`: An Oceanic [`Permission`](https://docs.oceanic.ws/latest/classes/Permission.Permission.html) object of the bot's current permissions for a channel.
+- `this.memberPermissions`: An Oceanic [`Permission`](https://docs.oceanic.ws/latest/classes/Permission.Permission.html) object of the user who ran the commands's current permissions for a channel.
+- `this.locale`: The language/locale being used. For classic commands, this is always the value of the `LOCALE` environment variable (or "en-US" if it hasn't been set), and for application commands this is the language set by the user that ran the command.
+- `this.cmdName`: The name of the running command. This should always be the same as the running command's filename without the .js extension.
 - `this.options`: When run as a "classic" command, this is an object of special arguments (e.g. `--argument=true`) passed to the command. These arguments are stored in a key/value format, so following the previous example, `this.options.argument` would return true. When run as a slash command, this is an object of every argument passed to the command.
 
 Some options are only available depending on the context/original message type, which can be checked with `this.type`. The options only available with "classic" messages are listed below:
@@ -59,7 +62,7 @@ Some options are only available depending on the context/original message type, 
 - `this.message`: An Oceanic [`Message`](https://docs.oceanic.ws/latest/classes/Message.Message.html) object of the message that the command was run from, useful for interaction.
 - `this.args`: An array of text arguments passed to the command.
 - `this.content`: A string of the raw content of the command message, excluding the prefix and command name.
-- `this.reference`: An object that's useful if you ever decide to reply to a user inside the command. You can use [`Object.assign`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/assign) to combine your message content with this parameter.
+- `this.reference`: An object that's useful if you ever decide to reply to a user inside the command. You can use [`Object.assign`](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Object/assign) to combine your message content with this parameter.
 
 The options only available with application (slash and context menu) commands are listed below:
 
@@ -71,7 +74,6 @@ Some static fields are also available and can be set depending on your command. 
 
 - `description`: Your command's description, which is shown in the help command.
 - `aliases`: An array of command aliases. People will be able to run the command using these as well as the normal command name.
-- `arguments`: An array of command argument types, which are shown in the help command.
 - `flags`: An array of objects specifying command flags, or special arguments, that will be shown when running `help <command>` or a slash command. Example:
 ```js
 static flags = [{
@@ -81,9 +83,15 @@ static flags = [{
   ...
 }];
 ```
+- `ephemeral`: Specifies whether or not the command output should be ephemeral.
 - `slashAllowed`: Specifies whether or not the command is available via slash commands.
 - `directAllowed`: Specifies whether or not a command is available in direct messages.
+- `userAllowed`: Specifies whether or not a command is available when run in a user installation context.
 - `adminOnly`: Specifies whether or not a command should be limited to the bot owner(s).
 
+In addition, a few helper functions are available inside the `Command` class:
+- `this.acknowledge()`: Sends a typing indicator in the current channel. Only works with classic commands.
+- `this.getString(key, returnNull)`: Gets a localized string for the input locale. If `returnNull` is set to false (the default) and the string does not exist on the input or default locales, the `key` string will be returned; otherwise, `null` will be returned.
+
 ## The `run` Function
-The main JS code of your command is specified in the `run` function. This function should return a [`Promise`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise) of your command output, which is why the `run` function [is an async function by default](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/async_function). The return value inside the `Promise` should be either a string or an object; you should return a string whenever you intend to reply with plain text, or an object if you intend to reply with something else, such as an embed or attachment.
+The main JS code of your command is specified in the `run` function. This function should return a [`Promise`](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Promise) of your command output, which is why the `run` function [is an async function by default](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Statements/async_function). The return value inside the `Promise` should be either a string or an object; you should return a string whenever you intend to reply with plain text, or an object if you intend to reply with something else, such as an embed or attachment.

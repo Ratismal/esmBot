@@ -3,7 +3,7 @@ import ImageCommand from "../../classes/imageCommand.js";
 
 class UncaptionCommand extends ImageCommand {
   params() {
-    const tolerance = parseFloat(this.options.tolerance);
+    const tolerance = Number.parseFloat(this.options.tolerance);
     return {
       tolerance: Number.isNaN(tolerance) ? 0.95 : tolerance
     };
@@ -15,8 +15,8 @@ class UncaptionCommand extends ImageCommand {
       name: "tolerance",
       type: Constants.ApplicationCommandOptionTypes.NUMBER,
       description: "Set the shade tolerance for the caption detection (0.0 is highest, 1.0 is lowest, default is 0.95)",
-      min_value: 0,
-      max_value: 1
+      minValue: 0,
+      maxValue: 1
     });
     return this;
   }

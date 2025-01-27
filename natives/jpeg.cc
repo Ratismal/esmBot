@@ -7,21 +7,20 @@ using namespace vips;
 
 ArgumentMap Jpeg(const string& type, string& outType, const char* bufferdata, size_t bufferLength, ArgumentMap arguments, size_t& dataSize)
 {
-  int quality = GetArgumentWithFallback<int>(arguments, "quality", 0);
+  int quality = GetArgumentWithFallback<int>(arguments, "quality", 1);
 
   char *buf;
 
-  if (type == "gif") {
-    VImage in = VImage::new_from_buffer(
+  VImage in = VImage::new_from_buffer(
                     bufferdata, bufferLength, "",
-                    VImage::option()->set("access", "sequential")->set("n", -1))
-                    .colourspace(VIPS_INTERPRETATION_sRGB);
-    if (!in.has_alpha()) in = in.bandjoin(255);
+                    GetInputOptions(type, true, false));
 
+  int nPages = type == "avif" ? 1 : vips_image_get_n_pages(in.get_image());
+
+  if (nPages > 1) {
     int width = in.width();
     int pageHeight = vips_image_get_page_height(in.get_image());
     int totalHeight = in.height();
-    int nPages = vips_image_get_n_pages(in.get_image());
 
     VImage final;
 
@@ -56,7 +55,6 @@ ArgumentMap Jpeg(const string& type, string& outType, const char* bufferdata, si
         ("." + outType).c_str(), reinterpret_cast<void**>(&buf), &dataSize,
         outType == "gif" ? VImage::option()->set("dither", 0) : 0);
   } else {
-    VImage in = VImage::new_from_buffer(bufferdata, bufferLength, "");
     void *jpgBuf;
     in.write_to_buffer(".jpg", &jpgBuf, &dataSize,
                        VImage::option()->set("Q", quality)->set("strip", true));
@@ -64,7 +62,7 @@ ArgumentMap Jpeg(const string& type, string& outType, const char* bufferdata, si
       VImage gifIn = VImage::new_from_buffer(reinterpret_cast<char*>(jpgBuf), dataSize, "");
       gifIn.write_to_buffer(
           ".gif", reinterpret_cast<void**>(&buf), &dataSize,
-          VImage::option()->set("Q", quality)->set("strip", true));
+          VImage::option()->set("strip", true));
     } else {
       outType = "jpg";
       buf = reinterpret_cast<char*>(jpgBuf);

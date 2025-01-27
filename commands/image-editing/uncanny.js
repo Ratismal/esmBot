@@ -1,9 +1,9 @@
 import ImageCommand from "../../classes/imageCommand.js";
 import { random, cleanMessage } from "../../utils/misc.js";
-import { readdirSync } from "fs";
+import { readdirSync } from "node:fs";
 import { Constants } from "oceanic.js";
-import { resolve, dirname } from "path";
-import { fileURLToPath } from "url";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 const prompts = ["you found:", "your dad is:", "you ate:", "your mom is:", "your sister is:", "you saw:", "you get lost in:", "you find:", "you grab:", "you pull out of your pocket:", "you fight:", "it's in your room:"];
 const names = readdirSync(resolve(dirname(fileURLToPath(import.meta.url)), "../../assets/images/uncanny/")).filter((val) => {
   if (!val.startsWith(".") && val.endsWith(".png")) return true;
@@ -14,7 +14,6 @@ const names = readdirSync(resolve(dirname(fileURLToPath(import.meta.url)), "../.
 class UncannyCommand extends ImageCommand {
   params(url, name = "unknown") {
     const newArgs = this.options.text ?? this.args.join(" ");
-    // eslint-disable-next-line prefer-const
     let [text1, text2] = newArgs.replaceAll(url, "").split(/(?<!\\),/).map(elem => elem.trim());
     if (!text2?.trim()) text2 = name;
     return {
@@ -57,7 +56,6 @@ class UncannyCommand extends ImageCommand {
 
   static description = "Makes a Mr. Incredible Becomes Uncanny image (separate left/right text with a comma)";
   static aliases = ["canny", "incredible", "pain"];
-  static args = ["{left text}", "{right text}"];
 
   static noImage = "You need to provide an image/GIF to create an uncanny image!";
   static command = "uncanny";

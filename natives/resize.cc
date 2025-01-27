@@ -10,18 +10,27 @@ ArgumentMap Resize(const string& type, string& outType, const char* bufferdata, 
   bool stretch = GetArgumentWithFallback<bool>(arguments, "stretch", false);
   bool wide = GetArgumentWithFallback<bool>(arguments, "wide", false);
 
-  VOption *options = VImage::option()->set("access", "sequential");
-
   VImage in =
       VImage::new_from_buffer(bufferdata, bufferLength, "",
-                              type == "gif" ? options->set("n", -1) : options)
+                              GetInputOptions(type, true, false))
           .colourspace(VIPS_INTERPRETATION_sRGB);
 
   VImage out;
 
   int width = in.width();
   int pageHeight = vips_image_get_page_height(in.get_image());
-  int nPages = vips_image_get_n_pages(in.get_image());
+  int nPages = type == "avif" ? 1 : vips_image_get_n_pages(in.get_image());
+
+  try {
+    in = NormalizeVips(in, &width, &pageHeight, nPages);
+  } catch (int e) {
+    if (e == -1) {
+      ArgumentMap output;
+      output["buf"] = "";
+      outType = "frames";
+      return output;
+    }
+  }
 
   int finalHeight = 0;
   if (stretch) {
@@ -37,7 +46,7 @@ ArgumentMap Resize(const string& type, string& outType, const char* bufferdata, 
     vector<VImage> img;
     for (int i = 0; i < nPages; i++) {
       VImage img_frame =
-          type == "gif" ? in.crop(0, i * pageHeight, width, pageHeight) : in;
+          nPages > 1 ? in.crop(0, i * pageHeight, width, pageHeight) : in;
       VImage resized = img_frame.resize(0.1).resize(
           10, VImage::option()->set("kernel", VIPS_KERNEL_NEAREST));
       img.push_back(resized);

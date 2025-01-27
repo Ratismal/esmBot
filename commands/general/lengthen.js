@@ -1,4 +1,3 @@
-import urlCheck from "../../utils/urlcheck.js";
 import Command from "../../classes/command.js";
 
 class LengthenCommand extends Command {
@@ -6,26 +5,45 @@ class LengthenCommand extends Command {
     await this.acknowledge();
     const input = this.options.url ?? this.args.join(" ");
     this.success = false;
-    if (!input || !input.trim() || !urlCheck(input)) return "You need to provide a short URL to lengthen!";
-    if (urlCheck(input)) {
+    if (!input || !input.trim() || !this.urlCheck(input)) return this.getString("commands.responses.lengthen.noInput");
+    if (this.urlCheck(input)) {
       const url = await fetch(encodeURI(input), { method: "HEAD", redirect: "manual" });
       this.success = true;
       return url.headers.get("location") || input;
-    } else {
-      return "That isn't a URL!";
     }
+    return this.getString("commands.responses.lengthen.notURL");
+  }
+
+  /**
+   * @param {string} string
+   */
+  urlCheck(string) {
+    const protocolAndDomainRE = /^(?:\w+:)?\/\/(\S+)$/;
+    const domainRE = /^[^\s.]+\.\S{2,}$/;
+    const match = string.match(protocolAndDomainRE);
+    if (!match) {
+      return false;
+    }
+    const everythingAfterProtocol = match[1];
+    if (!everythingAfterProtocol) {
+      return false;
+    }
+    if (domainRE.test(everythingAfterProtocol)) {
+      return true;
+    }
+    return false;
   }
 
   static flags = [{
     name: "url",
     type: 3,
     description: "The URL you want to lengthen",
+    classic: true,
     required: true
   }];
 
   static description = "Lengthens a short URL";
   static aliases = ["longurl", "lengthenurl", "longuri", "lengthenuri", "unshorten"];
-  static args = ["[url]"];
 }
 
 export default LengthenCommand;

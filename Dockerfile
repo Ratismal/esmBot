@@ -1,4 +1,8 @@
-# Docker/Kubernetes file for running the bot
+# Docker/Podman/Kubernetes file for running the bot
+
+# Enable/disable usage of ImageMagick
+ARG MAGICK="1"
+
 FROM node:lts-alpine AS base
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
@@ -9,8 +13,15 @@ RUN apk --no-cache upgrade
 RUN apk add --no-cache msttcorefonts-installer freetype fontconfig \
 		vips vips-cpp grep libltdl icu-libs zxing-cpp
 RUN update-ms-fonts && fc-cache -fv
+RUN mkdir /built
 
-FROM base AS native-build
+# Path without ImageMagick
+FROM base AS native-build-0
+RUN apk add --no-cache git cmake python3 alpine-sdk \
+		fontconfig-dev vips-dev zxing-cpp-dev
+
+# Path with ImageMagick
+FROM base AS native-build-1
 RUN apk add --no-cache git cmake python3 alpine-sdk \
     zlib-dev libpng-dev libjpeg-turbo-dev freetype-dev fontconfig-dev \
     libtool libwebp-dev libxml2-dev \
@@ -46,27 +57,12 @@ RUN git clone https://github.com/ImageMagick/ImageMagick.git ~/ImageMagick \
 
 RUN cp -a /built/* /usr
 
-RUN adduser esmBot -s /bin/sh -D
-WORKDIR /home/esmBot/.internal
-
-COPY ./assets/* /usr/share/fonts/
-COPY ./assets/caption.otf /usr/share/fonts/caption.otf
-COPY ./assets/caption2.ttf /usr/share/fonts/caption2.ttf
-COPY ./assets/hbc.ttf /usr/share/fonts/hbc.ttf
-COPY ./assets/reddit.ttf /usr/share/fonts/reddit.ttf
-COPY ./assets/whisper.otf /usr/share/fonts/whisper.otf
-RUN fc-cache -fv
-
-COPY --chown=node:node ./package.json package.json
-COPY --chown=node:node ./pnpm-lock.yaml pnpm-lock.yaml
-RUN pnpm install
-COPY . .
-RUN rm .env
-FROM native-build AS build
+FROM native-build-${MAGICK} AS build
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --no-optional --frozen-lockfile
-RUN pnpm run build
+# Detect ImageMagick usage and adjust build accordingly
+RUN if [[ "$MAGICK" -eq "1" ]] ; then pnpm run build ; else pnpm run build:no-magick ; fi
 
-FROM native-build AS prod-deps
+FROM native-build-${MAGICK} AS prod-deps
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --prod --no-optional --frozen-lockfile
 
 FROM base

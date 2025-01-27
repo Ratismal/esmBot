@@ -1,36 +1,43 @@
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
-import { Worker } from "worker_threads";
-import { createRequire } from "module";
-import { fileTypeFromBuffer, fileTypeFromFile } from "file-type";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { Worker } from "node:worker_threads";
+import { createRequire } from "node:module";
+import { lookup } from "node:dns/promises";
+import ipaddr from "ipaddr.js";
+import { fileTypeFromBuffer } from "file-type";
 import logger from "./logger.js";
 import ImageConnection from "./imageConnection.js";
 
-// init image libraries
-const nodeRequire = createRequire(import.meta.url);
-if (!process.env.API_TYPE || process.env.API_TYPE === "none") {
+/**
+ * @typedef {{ cmd: string; params: object; id: string; }} JobObject
+ */
+
+const formats = ["image/jpeg", "image/png", "image/webp", "image/gif", "video/mp4", "video/webm", "video/quicktime", "image/avif"];
+export const connections = new Map();
+export let servers = process.env.API_TYPE === "ws" ? JSON.parse(fs.readFileSync(new URL("../config/servers.json", import.meta.url), { encoding: "utf8" })).image : [];
+
+export function initImageLib() {
+  const nodeRequire = createRequire(import.meta.url);
   const img = nodeRequire(`../build/${process.env.DEBUG && process.env.DEBUG === "true" ? "Debug" : "Release"}/image.node`);
   img.imageInit();
 }
 
-const formats = ["image/jpeg", "image/png", "image/webp", "image/gif", "video/mp4", "video/webm", "video/quicktime"];
-export const connections = new Map();
-export let servers = process.env.API_TYPE === "ws" ? JSON.parse(fs.readFileSync(new URL("../config/servers.json", import.meta.url), { encoding: "utf8" })).image : [];
-
 /**
- * @param {string} image
+ * @param {URL} image
  * @param {boolean} extraReturnTypes
  */
 export async function getType(image, extraReturnTypes) {
-  if (!image.startsWith("http")) {
-    const imageType = await fileTypeFromFile(image);
-    if (imageType && formats.includes(imageType.mime)) {
-      return imageType.mime;
-    }
-    return undefined;
+  try {
+    const remoteIP = await lookup(image.host);
+    const parsedIP = ipaddr.parse(remoteIP.address);
+    if (parsedIP.range() !== "unicast") return;
+  } catch (e) {
+    if (e.code === "ENOTFOUND") return;
+    throw e;
   }
   let type;
+  let url;
   const controller = new AbortController();
   const timeout = setTimeout(() => {
     controller.abort();
@@ -41,17 +48,24 @@ export async function getType(image, extraReturnTypes) {
       method: "HEAD"
     });
     clearTimeout(timeout);
+    if (imageRequest.redirected) {
+      const redirectHost = new URL(imageRequest.url).host;
+      const remoteIP = await lookup(redirectHost);
+      const parsedIP = ipaddr.parse(remoteIP.address);
+      if (parsedIP.range() !== "unicast") return;
+    }
+    url = imageRequest.url;
     let size = 0;
     if (imageRequest.headers.has("content-range")) {
       const contentRange = imageRequest.headers.get("content-range");
-      if (contentRange) size = parseInt(contentRange.split("/")[1]);
+      if (contentRange) size = Number.parseInt(contentRange.split("/")[1]);
     } else if (imageRequest.headers.has("content-length")) {
       const contentLength = imageRequest.headers.get("content-length");
-      if (contentLength) size = parseInt(contentLength);
+      if (contentLength) size = Number.parseInt(contentLength);
     }
     if (size > 41943040 && extraReturnTypes) { // 40 MB
       type = "large";
-      return type;
+      return { type };
     }
     const typeHeader = imageRequest.headers.get("content-type");
     if (typeHeader) {
@@ -60,7 +74,7 @@ export async function getType(image, extraReturnTypes) {
       const timeout = setTimeout(() => {
         controller.abort();
       }, 3000);
-      const bufRequest = await fetch(image, {
+      const bufRequest = await fetch(url, {
         signal: controller.signal,
         headers: {
           range: "bytes=0-1023"
@@ -76,11 +90,17 @@ export async function getType(image, extraReturnTypes) {
   } finally {
     clearTimeout(timeout);
   }
-  return type;
+  return { type, url };
 }
 
-function connect(server, auth) {
-  const connection = new ImageConnection(server, auth);
+/**
+ * @param {string} server
+ * @param {string} auth
+ * @param {string | undefined} name
+ * @param {boolean} tls
+ */
+function connect(server, auth, name, tls) {
+  const connection = new ImageConnection(server, auth, name, tls);
   connections.set(server, connection);
 }
 
@@ -102,7 +122,7 @@ export async function reloadImageConnections() {
   let amount = 0;
   for (const server of servers) {
     try {
-      connect(server.server, server.auth);
+      connect(server.server, server.auth, server.name, server.tls);
       amount += 1;
     } catch (e) {
       logger.error(e);
@@ -119,6 +139,10 @@ function chooseServer(ideal) {
   return sorted[0];
 }
 
+/**
+ * @param {JobObject} object
+ * @returns {Promise<ImageConnection>}
+ */
 async function getIdeal(object) {
   const idealServers = [];
   for (const [address, connection] of connections) {
@@ -140,42 +164,68 @@ async function getIdeal(object) {
   return connections.get(server.addr);
 }
 
+/**
+ * @param {Worker} worker 
+ * @returns {Promise<{ buffer: Buffer; type: string; }>}
+ */
 function waitForWorker(worker) {
   return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      worker.removeAllListeners("message");
+      worker.removeAllListeners("error");
+      worker.terminate();
+      reject(new Error("Job timed out"));
+    }, 600000);
     worker.once("message", (data) => {
+      clearTimeout(timeout);
       resolve({
         buffer: Buffer.from([...data.buffer]),
         type: data.fileExtension
       });
     });
-    worker.once("error", reject);
+    worker.once("error", (e) => {
+      clearTimeout(timeout);
+      reject(e);
+    });
   });
 }
 
+/**
+ * @param {JobObject} params
+ * @returns {Promise<{ buffer: Buffer; type: string; }>}
+ */
 export async function runImageJob(params) {
   if (process.env.API_TYPE === "ws") {
     for (let i = 0; i < 3; i++) {
       const currentServer = await getIdeal(params);
       if (!currentServer) return {
+        buffer: Buffer.alloc(0),
         type: "nocmd"
       };
       try {
         await currentServer.queue(BigInt(params.id), params);
-        await currentServer.wait(BigInt(params.id));
+        const result = await currentServer.wait(BigInt(params.id));
+        if (result) return {
+          buffer: Buffer.alloc(0),
+          type: "sent"
+        };
         const output = await currentServer.getOutput(params.id);
         return output;
       } catch (e) {
         if (i >= 2 && e !== "Request ended prematurely due to a closed connection") {
-          if (e === "No available servers" && i >= 2) throw "Request ended prematurely due to a closed connection";
+          if (e === "No available servers") throw "Request ended prematurely due to a closed connection";
           throw e;
         }
       }
     }
-  } else {
+    return {
+      buffer: Buffer.alloc(0),
+      type: "noresult"
+    };
+  }
     // Called from command (not using image API)
     const worker = new Worker(path.join(path.dirname(fileURLToPath(import.meta.url)), "./image-runner.js"), {
       workerData: params
     });
     return await waitForWorker(worker);
-  }
 }

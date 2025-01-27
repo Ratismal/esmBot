@@ -11,21 +11,19 @@ ArgumentMap Flip(const string& type, string& outType, const char* bufferdata, si
   bool flop = GetArgumentWithFallback<bool>(arguments, "flop", false);
 
   VImage in = VImage::new_from_buffer(bufferdata, bufferLength, "",
-                                      type == "gif"
-                                          ? VImage::option()->set("n", -1)->set(
-                                                "access", "sequential")
-                                          : 0)
+                                      GetInputOptions(type, true, true))
                   .colourspace(VIPS_INTERPRETATION_sRGB);
   if (!in.has_alpha()) in = in.bandjoin(255);
+
+  int nPages = type == "avif" ? 1 : vips_image_get_n_pages(in.get_image());
 
   VImage out;
   if (flop) {
     out = in.flip(VIPS_DIRECTION_HORIZONTAL);
-  } else if (type == "gif") {
-    // libvips gif handling is both a blessing and a curse
+  } else if (nPages > 1) {
+    // libvips animation handling is both a blessing and a curse
     vector<VImage> img;
     int pageHeight = vips_image_get_page_height(in.get_image());
-    int nPages = vips_image_get_n_pages(in.get_image());
     for (int i = 0; i < nPages; i++) {
       VImage img_frame = in.crop(0, i * pageHeight, in.width(), pageHeight);
       VImage flipped = img_frame.flip(VIPS_DIRECTION_VERTICAL);

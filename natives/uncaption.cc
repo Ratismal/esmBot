@@ -13,14 +13,13 @@ ArgumentMap Uncaption(const string& type, string& outType, const char* bufferdat
   VImage in =
       VImage::new_from_buffer(
           bufferdata, bufferLength, "",
-          type == "gif" ? VImage::option()->set("n", -1)->set("access", "sequential")
-                        : 0)
+          GetInputOptions(type, true, true))
           .colourspace(VIPS_INTERPRETATION_sRGB);
   if (!in.has_alpha()) in = in.bandjoin(255);
 
   int width = in.width();
   int pageHeight = vips_image_get_page_height(in.get_image());
-  int nPages = vips_image_get_n_pages(in.get_image());
+  int nPages = type == "avif" ? 1 : vips_image_get_n_pages(in.get_image());
 
   VImage first =
       in.crop(0, 0, 3, pageHeight).colourspace(VIPS_INTERPRETATION_B_W) >
