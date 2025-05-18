@@ -127,6 +127,12 @@ data/
 package-lock.json
 yarn.lock
 
+# Azurite artifacts
+__blobstorage__
+__queuestorage__
+__azurite_db*__.json
+
+bot-temp
 # Container outputs
 bot-temp/
 bot-help/
