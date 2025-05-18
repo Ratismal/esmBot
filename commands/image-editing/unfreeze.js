@@ -1,8 +1,8 @@
-import ImageCommand from "../../classes/imageCommand.js";
+import ImageCommand from "#cmd-classes/imageCommand.js";
 
 class UnfreezeCommand extends ImageCommand {
   params = {
-    loop: true
+    loop: true,
   };
 
   static description = "Unfreezes an image sequence";

@@ -1,12 +1,12 @@
-import Command from "../../classes/command.js";
-import { reload } from "../../utils/soundplayer.js";
+import Command from "#cmd-classes/command.js";
+import { reload } from "#utils/soundplayer.js";
 
 class SoundReloadCommand extends Command {
   async run() {
-    const owners = process.env.OWNER.split(",");
+    const owners = process.env.OWNER?.split(",") ?? [];
     if (!owners.includes(this.author.id)) {
       this.success = false;
-      return "Only the bot owner can reload Lavalink!";
+      return this.getString("commands.responses.soundreload.botOwnerOnly");
     }
     await this.acknowledge();
     const length = await reload(this.client);
@@ -14,15 +14,14 @@ class SoundReloadCommand extends Command {
       process.send?.({
         type: "process:msg",
         data: {
-          type: "soundreload"
-        }
+          type: "soundreload",
+        },
       });
     }
     if (length) {
-      return `Successfully connected to ${length} Lavalink node(s).`;
-    } else {
-      return "I couldn't connect to any Lavalink nodes!";
+      return this.getString("commands.responses.soundreload.failed", { params: { length: length.toString() } });
     }
+    return this.getString("commands.responses.soundreload.failed");
   }
 
   static description = "Attempts to reconnect to all available Lavalink nodes";

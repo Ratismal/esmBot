@@ -1,11 +1,13 @@
-import ImageCommand from "../../classes/imageCommand.js";
-import { cleanMessage } from "../../utils/misc.js";
+import ImageCommand from "#cmd-classes/imageCommand.js";
 
 class HomebrewCommand extends ImageCommand {
-  params(url) {
-    const newArgs = this.options.text ?? this.args.filter(item => !item.includes(url)).join(" ");
+  /**
+   * @param {string | undefined} url
+   */
+  paramsFunc(url) {
+    const newArgs = this.getOptionString("text") ?? this.args.filter((item) => !item.includes(url ?? "")).join(" ");
     return {
-      caption: cleanMessage(this.message ?? this.interaction, newArgs)
+      caption: this.clean(newArgs),
     };
   }
 

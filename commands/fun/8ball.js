@@ -1,5 +1,6 @@
-import Command from "../../classes/command.js";
-import { random } from "../../utils/misc.js";
+import { Constants } from "oceanic.js";
+import Command from "#cmd-classes/command.js";
+import { random } from "#utils/misc.js";
 
 class EightBallCommand extends Command {
   static responses = [
@@ -22,19 +23,21 @@ class EightBallCommand extends Command {
     "replyNo",
     "sourcesNo",
     "outlookBad",
-    "doubtful"
+    "doubtful",
   ];
 
   async run() {
     return `🎱 ${this.getString(`commands.responses.8ball.${random(EightBallCommand.responses)}`)}`;
   }
 
-  static flags = [{
-    name: "question",
-    type: 3,
-    description: "A question you want to ask the ball",
-    classic: true
-  }];
+  static flags = [
+    {
+      name: "question",
+      type: Constants.ApplicationCommandOptionTypes.STRING,
+      description: "A question you want to ask the ball",
+      classic: true,
+    },
+  ];
 
   static description = "Asks the magic 8-ball a question";
   static aliases = ["magicball", "magikball", "magic8ball", "magik8ball", "eightball"];

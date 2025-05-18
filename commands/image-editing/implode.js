@@ -1,8 +1,8 @@
-import ImageCommand from "../../classes/imageCommand.js";
+import ImageCommand from "#cmd-classes/imageCommand.js";
 
 class ImplodeCommand extends ImageCommand {
   params = {
-    mapName: "linearimplode.png"
+    mapName: "linearimplode.png",
   };
 
   static description = "Implodes an image";

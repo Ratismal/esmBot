@@ -1,13 +1,9 @@
-cmake_minimum_required(VERSION 3.15)
-cmake_policy(SET CMP0091 NEW)
-cmake_policy(SET CMP0042 NEW)
+cmake_minimum_required(VERSION 3.15...3.31)
 project(image)
 
 include(FindPkgConfig)
 include(FetchContent)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 set(SOURCE_FILES natives/blur.cc
   natives/bounce.cc
@@ -21,6 +17,7 @@ set(SOURCE_FILES natives/blur.cc
   natives/crop.cc
   natives/deepfry.cc
   natives/distort.cc
+  natives/fade.cc
   natives/flag.cc
   natives/flip.cc
   natives/freeze.cc
@@ -50,8 +47,15 @@ set(SOURCE_FILES natives/blur.cc
   natives/watermark.cc
   natives/whisper.cc)
 
+if (APPLE)
+  set(WITH_ZXING_DEFAULT OFF)
+else()
+  set(WITH_ZXING_DEFAULT ON)
+endif()
+
 option(WITH_MAGICK "Build with ImageMagick, enables the circle, magik, and spin commands" OFF)
-option(WITH_ZXING "Build with zxing-cpp, enables the qrcreate and qrread commands" ON)
+option(WITH_ZXING "Build with zxing-cpp, enables the qrcreate and qrread commands" ${WITH_ZXING_DEFAULT})
+option(WITH_BACKWARD "Build with backward-cpp, prints a backtrace on crash/abort" ON)
 
 if (WITH_MAGICK)
   list(APPEND SOURCE_FILES natives/magik.cc
@@ -63,10 +67,10 @@ if (WITH_ZXING)
 endif()
 
 if (CMAKE_JS_VERSION)
-  include_directories(${CMAKE_JS_INC})
-  add_library(${PROJECT_NAME} SHARED ${SOURCE_FILES} ${CMAKE_JS_SRC} natives/node/image.cc)
+  add_library(${PROJECT_NAME} SHARED ${SOURCE_FILES} ${CMAKE_JS_SRC} natives/node/image.cc natives/node/worker.cc)
   set_target_properties(${PROJECT_NAME} PROPERTIES PREFIX "" SUFFIX ".node")
-  target_link_libraries(${PROJECT_NAME} ${CMAKE_JS_LIB})
+  target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_JS_INC})
+  target_link_libraries(${PROJECT_NAME} PRIVATE ${CMAKE_JS_LIB})
 else()
   add_library(${PROJECT_NAME} SHARED ${SOURCE_FILES} natives/generic/image.cc)
 endif()
@@ -80,7 +84,7 @@ if(MSVC) # todo: change flags for more parity with GCC/clang, I don't know much 
   set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
   set(BUILD_SHARED_LIBS TRUE)
 else()
-  set(CMAKE_CXX_FLAGS "-Wall -Wextra -Werror=format-security -Wno-cast-function-type -fexceptions -D_GLIBCXX_ASSERTIONS -fstack-clash-protection -pedantic -D_GLIBCXX_USE_CXX11_ABI=1")
+  set(CMAKE_CXX_FLAGS "-Wall -Wextra -Werror=format-security -Wno-cast-function-type -fexceptions -D_GLIBCXX_ASSERTIONS -fstack-clash-protection -pedantic")
   set(CMAKE_CXX_FLAGS_DEBUG "-g")
   set(CMAKE_CXX_FLAGS_RELEASE "-O2")
 endif()
@@ -88,29 +92,32 @@ endif()
 if (WITH_MAGICK)
   find_package(ImageMagick COMPONENTS Magick++ MagickCore)
   if (ImageMagick_FOUND)
-  add_definitions(-DMAGICK_ENABLED)
-  add_definitions(-DMAGICKCORE_QUANTUM_DEPTH=16)
-  add_definitions(-DMAGICKCORE_HDRI_ENABLE=0)
-  include_directories(${ImageMagick_INCLUDE_DIRS})
-  target_link_libraries(${PROJECT_NAME} ${ImageMagick_LIBRARIES})
+    add_definitions(-DMAGICK_ENABLED)
+    add_definitions(-DMAGICKCORE_QUANTUM_DEPTH=16)
+    add_definitions(-DMAGICKCORE_HDRI_ENABLE=0)
+    include_directories(${ImageMagick_INCLUDE_DIRS})
+    target_link_libraries(${PROJECT_NAME} ${ImageMagick_LIBRARIES})
   endif()
 endif()
 
 if (WITH_ZXING)
   find_package(ZXing)
   if (ZXing_FOUND)
-  add_definitions(-DZXING_ENABLED)
-  target_link_libraries(${PROJECT_NAME} ZXing::ZXing)
+    add_definitions(-DZXING_ENABLED)
+    target_link_libraries(${PROJECT_NAME} ZXing::ZXing)
   endif()
+endif()
+
+if (WITH_BACKWARD)
+  FetchContent_Declare(backward GIT_REPOSITORY https://github.com/bombela/backward-cpp)
+  FetchContent_MakeAvailable(backward)
+  add_definitions(-DWITH_BACKWARD)
+  target_link_libraries(${PROJECT_NAME} Backward::Interface)
 endif()
 
 find_package(Fontconfig REQUIRED)
 include_directories(${Fontconfig_INCLUDE_DIRS})
 target_link_libraries(${PROJECT_NAME} ${Fontconfig_LIBRARIES})
-
-find_package(WebP MODULE REQUIRED COMPONENTS mux)
-include_directories(${WebP_INCLUDE_DIRS})
-target_link_libraries(${PROJECT_NAME} ${WebP_LIBRARIES})
 
 pkg_check_modules(VIPS REQUIRED vips-cpp)
 include_directories(${VIPS_INCLUDE_DIRS})

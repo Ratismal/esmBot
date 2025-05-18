@@ -1,10 +1,10 @@
-import ImageCommand from "../../classes/imageCommand.js";
+import ImageCommand from "#cmd-classes/imageCommand.js";
 
 class AVSCommand extends ImageCommand {
   params = {
     water: "assets/images/avs4you.png",
     gravity: 5,
-    resize: true
+    resize: true,
   };
 
   static description = "Adds the avs4you watermark to an image";

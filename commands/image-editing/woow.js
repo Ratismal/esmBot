@@ -1,9 +1,9 @@
-import ImageCommand from "../../classes/imageCommand.js";
+import ImageCommand from "#cmd-classes/imageCommand.js";
 
 class WooWCommand extends ImageCommand {
   params = {
     vertical: true,
-    first: true
+    first: true,
   };
 
   static description = "Mirrors the top of an image onto the bottom";

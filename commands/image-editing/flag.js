@@ -1,12 +1,12 @@
 import fs from "node:fs";
 import emojiRegex from "emoji-regex-xs";
-import ImageCommand from "../../classes/imageCommand.js";
+import ImageCommand from "#cmd-classes/imageCommand.js";
 
 class FlagCommand extends ImageCommand {
   flagPath = "";
 
   async criteria() {
-    const text = this.options.text ?? this.args[0];
+    const text = this.getOptionString("text") ?? this.args[0];
     const matched = text.match(emojiRegex());
     if (!matched) return false;
     let path;
@@ -34,14 +34,18 @@ class FlagCommand extends ImageCommand {
    * @param {string} flag
    */
   ccFromFlag(flag) {
-    const codepoints = [...flag].map(c => c.codePointAt() - 127397);
+    const codepoints = [...flag].map((c) => {
+      const codepoint = c.codePointAt(0);
+      if (!codepoint) throw Error("Missing codepoint");
+      return codepoint - 127397;
+    });
     if (codepoints.find((v) => v < 65 || v > 90)) return;
     return String.fromCodePoint(...codepoints);
   }
 
-  params() {
+  paramsFunc() {
     return {
-      overlay: this.flagPath
+      overlay: this.flagPath,
     };
   }
 

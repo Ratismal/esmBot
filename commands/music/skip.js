@@ -1,5 +1,5 @@
-import { skipVotes } from "../../utils/soundplayer.js";
-import MusicCommand from "../../classes/musicCommand.js";
+import MusicCommand from "#cmd-classes/musicCommand.js";
+import { skipVotes } from "#utils/soundplayer.js";
 
 class SkipCommand extends MusicCommand {
   async run() {
@@ -10,27 +10,43 @@ class SkipCommand extends MusicCommand {
     const player = this.connection;
     if (!player) return this.getString("sound.noConnection");
     if (player.host !== this.author.id && !this.memberPermissions.has("MANAGE_CHANNELS")) {
-      const votes = skipVotes.get(this.guild.id) ?? { count: 0, ids: [], max: Math.min(3, player.voiceChannel.voiceMembers.filter((i) => i.id !== this.client.user.id && !i.bot).length) };
-      if (votes.ids.includes(this.author.id)) return "You've already voted to skip!";
+      const voiceChannel =
+        this.client.getChannel(player.voiceChannel) ?? (await this.client.rest.channels.get(player.voiceChannel));
+      if (!("voiceMembers" in voiceChannel)) throw Error("Voice member list not found");
+      const votes = skipVotes.get(this.guild.id) ?? {
+        count: 0,
+        ids: [],
+        max: Math.min(3, voiceChannel.voiceMembers.filter((i) => i.id !== this.client.user.id && !i.bot).length),
+      };
+      if (votes.ids.includes(this.author.id)) return this.getString("commands.responses.skip.alreadyVoted");
       const newObject = {
         count: votes.count + 1,
-        ids: [...votes.ids, this.author.id].filter(item => !!item),
-        max: votes.max
+        ids: [...votes.ids, this.author.id].filter((item) => !!item),
+        max: votes.max,
       };
       if (votes.count + 1 === votes.max) {
         await player.player.stopTrack();
-        skipVotes.set(this.guild.id, { count: 0, ids: [], max: Math.min(3, player.voiceChannel.voiceMembers.filter((i) => i.id !== this.client.user.id && !i.bot).length) });
+        skipVotes.set(this.guild.id, {
+          count: 0,
+          ids: [],
+          max: Math.min(3, voiceChannel.voiceMembers.filter((i) => i.id !== this.client.user.id && !i.bot).length),
+        });
         this.success = true;
-        if (this.type === "application") return "🔊 The current song has been skipped.";
+        if (this.type === "application") return `🔊 ${this.getString("commands.responses.skip.skipped")}`;
       } else {
         skipVotes.set(this.guild.id, newObject);
         this.success = true;
-        return `🔊 Voted to skip song (${votes.count + 1}/${votes.max} people have voted).`;
+        return `🔊 ${this.getString("commands.responses.skip.voted", {
+          params: {
+            count: votes.count + 1,
+            max: votes.max,
+          },
+        })}`;
       }
     } else {
       await player.player.stopTrack();
       this.success = true;
-      if (this.type === "application") return "🔊 The current song has been skipped.";
+      if (this.type === "application") return `🔊 ${this.getString("commands.responses.skip.skipped")}`;
     }
   }
 

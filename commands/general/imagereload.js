@@ -1,9 +1,9 @@
-import Command from "../../classes/command.js";
-import { reloadImageConnections } from "../../utils/image.js";
+import Command from "#cmd-classes/command.js";
+import { reloadImageConnections } from "#utils/image.js";
 
 class ImageReloadCommand extends Command {
   async run() {
-    const owners = process.env.OWNER.split(",");
+    const owners = process.env.OWNER?.split(",") ?? [];
     if (!owners.includes(this.author.id)) {
       this.success = false;
       return this.getString("commands.responses.imagereload.owner");
@@ -15,11 +15,11 @@ class ImageReloadCommand extends Command {
         process.send?.({
           type: "process:msg",
           data: {
-            type: "imagereload"
-          }
+            type: "imagereload",
+          },
         });
       }
-      return `Successfully connected to ${length} image server(s).`;
+      return this.getString("commands.responses.imagereload.connected", { params: { length: length.toString() } });
     }
     return this.getString("commands.responses.imagereload.couldNotConnect");
   }

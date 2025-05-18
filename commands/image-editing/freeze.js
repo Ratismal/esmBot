@@ -1,12 +1,12 @@
 import { Constants } from "oceanic.js";
-import ImageCommand from "../../classes/imageCommand.js";
+import ImageCommand from "#cmd-classes/imageCommand.js";
 
 class FreezeCommand extends ImageCommand {
-  params() {
-    const frameCount = Number.parseInt(this.options.endframe ?? this.args[0]);
+  paramsFunc() {
+    const frameCount = this.getOptionInteger("endframe") ?? Number.parseInt(this.args[0]);
     return {
       loop: false,
-      frame: Number.isNaN(frameCount) ? -1 : frameCount
+      frame: Number.isNaN(frameCount) ? -1 : frameCount,
     };
   }
 
@@ -17,7 +17,7 @@ class FreezeCommand extends ImageCommand {
       type: Constants.ApplicationCommandOptionTypes.INTEGER,
       description: "Set the end frame (default: last frame)",
       minValue: 0,
-      classic: true
+      classic: true,
     });
     return this;
   }

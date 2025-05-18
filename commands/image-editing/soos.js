@@ -1,11 +1,11 @@
-import ImageCommand from "../../classes/imageCommand.js";
+import ImageCommand from "#cmd-classes/imageCommand.js";
 
 class SooSCommand extends ImageCommand {
   params = {
-    soos: true
+    soos: true,
   };
 
-  static description = "\"Loops\" an image sequence by reversing it when it's finished";
+  static description = '"Loops" an image sequence by reversing it when it\'s finished';
   static aliases = ["boomerang"];
 
   static requiresAnim = true;

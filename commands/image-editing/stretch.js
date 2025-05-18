@@ -1,8 +1,8 @@
-import ImageCommand from "../../classes/imageCommand.js";
+import ImageCommand from "#cmd-classes/imageCommand.js";
 
 class StretchCommand extends ImageCommand {
   params = {
-    stretch: true
+    stretch: true,
   };
 
   static description = "Stretches an image to a 1:1 aspect ratio";

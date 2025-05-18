@@ -5,15 +5,15 @@
 using namespace std;
 using namespace vips;
 
-ArgumentMap Resize(const string& type, string& outType, const char* bufferdata, size_t bufferLength, ArgumentMap arguments, size_t& dataSize)
+ArgumentMap Resize(const string& type, string& outType, const char* bufferdata, size_t bufferLength, ArgumentMap arguments, bool* shouldKill)
 {
   bool stretch = GetArgumentWithFallback<bool>(arguments, "stretch", false);
   bool wide = GetArgumentWithFallback<bool>(arguments, "wide", false);
+  int wideAmount = GetArgumentWithFallback<int>(arguments, "amount", 19);
 
   VImage in =
       VImage::new_from_buffer(bufferdata, bufferLength, "",
-                              GetInputOptions(type, true, false))
-          .colourspace(VIPS_INTERPRETATION_sRGB);
+                              GetInputOptions(type, true, false));
 
   VImage out;
 
@@ -39,8 +39,8 @@ ArgumentMap Resize(const string& type, string& outType, const char* bufferdata, 
                   VImage::option()->set("vscale", 512.0 / (double)pageHeight));
     finalHeight = 512;
   } else if (wide) {
-    out = in.resize(9.5, VImage::option()->set("vscale", 0.5));
-    finalHeight = pageHeight / 2;
+    out = in.resize(wideAmount, VImage::option()->set("vscale", 1));
+    finalHeight = pageHeight;
   } else {
     // Pain. Pain. Pain. Pain. Pain.
     vector<VImage> img;
@@ -56,11 +56,15 @@ ArgumentMap Resize(const string& type, string& outType, const char* bufferdata, 
   }
   out.set(VIPS_META_PAGE_HEIGHT, finalHeight);
 
+  SetupTimeoutCallback(out, shouldKill);
+
   char *buf;
+  size_t dataSize = 0;
   out.write_to_buffer(("." + outType).c_str(), reinterpret_cast<void**>(&buf), &dataSize);
 
   ArgumentMap output;
   output["buf"] = buf;
+  output["size"] = dataSize;
 
   return output;
 }

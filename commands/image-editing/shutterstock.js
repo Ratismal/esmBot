@@ -1,10 +1,10 @@
-import ImageCommand from "../../classes/imageCommand.js";
+import ImageCommand from "#cmd-classes/imageCommand.js";
 
 class ShutterstockCommand extends ImageCommand {
   params = {
     water: "assets/images/shutterstock.png",
     gravity: 5,
-    resize: true
+    resize: true,
   };
 
   static description = "Adds the Shutterstock watermark to an image";
